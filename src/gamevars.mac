@@ -1,0 +1,91 @@
+; ------------------------------------------------------------------
+; Uninitialised RAM: variables, entity records, map buffers, stack.
+; Placed after the loaded image (nothing here emits bytes) - the
+; code must initialise what it uses.  Layout: 120000..127777, the
+; stack grows down from BUF (130000).  This module assembles before
+; the code (so every label is known everywhere) and returns the
+; location counter to 0 for boot.mac at the end.
+; ------------------------------------------------------------------
+		. = 120000
+
+; PPU mailbox (written by the PPU program via @#177010/177014).
+; CPU_VSYNC must directly follow KEYS_DATA - the PPU timer writes
+; them back to back.
+KEYS_DATA:	.BLKW	1	; key state word from the PPU
+CPU_VSYNC:	.BLKW	1	; nonzero once per 50 Hz tick
+SND_REQ:	.BLKW	1	; sound request: 1 death, 2 pickup, 3 hit, 4 step
+SND_MODE:	.BLKW	1	; nonzero = loop the title tune
+ROWPALS:	.BLKW	48.	; 24 x 2 palette words (PPU COMMAND_2)
+TITLE_PPBLK:	.BLKW	1	; PPU RAM block holding the title plane 0
+
+; ---- game variables (ZX FExx equivalents, same roles) ------------
+VBLF:		.BLKW	1	; vsync bits (ISR shifts in, loop consumes)
+FRAMECNT:	.BLKW	1	; FE05: frames since chamber load
+CHAMBER:	.BLKW	1	; FE03: current chamber 0..19
+PLAYER:		.BLKW	1	; FE04: current player 1/2
+TWOPLAYER:	.BLKW	1	; FE07: two alternating players
+YAMO_HUMAN:	.BLKW	1	; FE08: player 2 controls Yamo
+DEMO:		.BLKW	1	; FE0B: attract mode
+REDRAW:		.BLKW	1	; full-screen blit scheduled
+EXITFLAG:	.BLKW	1	; FE0C: chamber exit forced
+HARDMODE:	.BLKW	1	; FE0D: short enemy respawn delay
+NEXTCH:		.BLKB	2	; FE0E/0F: chamber per player
+CMD1:		.BLKB	1	; FE11: latched command, player 1 view
+CMD2:		.BLKB	1	; FE12: player 2 view
+PREV1:		.BLKB	1	; FE13/14: previous raw commands
+PREV2:		.BLKB	1
+LATCH1:		.BLKB	1	; FE1B/1C: debounced commands
+LATCH2:		.BLKB	1
+FREEZE:		.BLKW	1	; FE1A: skip state machines this frame
+SOUND_ON:	.BLKW	1	; FE9A
+WIZL:		.BLKW	1	; FE95: wizard hits + endgame bits
+BOLTT:		.BLKB	1	; FE9B: wizard bolt timer
+BOLTP:		.BLKB	1	; FE9C: bolt position/direction
+TICK99:		.BLKB	1	; FE99: free-running ISR counter
+PICKCH:		.BLKB	1	; FE98: chamber of the pending pickup
+FLOORST:	.BLKB	1	; FE3C-like: ch18 collapsing floor state
+FLOORCO:	.BLKW	1	; FE17/18: its cell coords (col,row bytes)
+FLOORDI:	.BLKB	1	; FE19: its column step
+		.EVEN
+PICKTMP:	.BLKW	1	; FEAE: pending pickup cell offset
+PICKGRD:	.BLKW	1	; FEB0: pending pickup guard address
+DIMSPTR:	.BLKW	1	; FEAC: current frame info (w,h) address
+SCORETMP:	.BLKW	1	; FEAA/AB: displayed score top digits
+
+CHCNT:		.BLKB	40	; FE20..3F: per-chamber pickup counters
+CHCNT2:		.BLKB	40	; FE40..5F: same for player 2
+DOORSL:		.BLKB	22	; FE60..71: 6 door slots {cnt, offs.w}
+ANIMR1:		.BLKB	5	; FE72..: tile animation records
+ANIMR2:		.BLKB	5	; (+1 of each is bumped by the ISR)
+ANIMR3:		.BLKB	5
+P2SWAP:		.BLKB	24.	; FE81..92: entity swap for player 2
+		.EVEN
+
+; HUD text: 2 rows x 32 chars; score/top/falls digits live inside
+HUDTEXT:	.BLKB	4	; "1UP " / "2UP "
+HUDSCORE:	.BLKB	6	; displayed score digits
+		.BLKB	6	; "  TOP "  (offset 10)
+HUDTOP:		.BLKB	6	; top score digits (offset 16)
+		.BLKB	8.	; "  FALLS " (offset 22)
+HUDFALLS:	.BLKB	2	; lives digits (offset 30)
+HUDROW2:	.BLKB	40	; second HUD row
+SCORE1:		.BLKB	6	; player 1 score (ASCII)
+SCORE2:		.BLKB	6	; player 2 score
+		.EVEN
+
+; ---- entity records ----------------------------------------------
+NINJA:		.BLKB	E.SIZE
+YAMO:		.BLKB	E.SIZE
+BRUCE:		.BLKB	E.SIZE
+		.EVEN
+
+; ---- chamber header + live map + pristine copy -------------------
+; HDR and MAP are contiguous: cell offset row*32+col addresses the
+; map from MAPB with rows 2..23; offsets < 100 patch the header.
+HDR:		.BLKB	100	; 64-byte chamber header
+MAP:		.BLKB	1300	; 704 cells
+PRIS:		.BLKB	1400	; pristine header+map copy
+MAPB = HDR
+PRISB = PRIS
+
+		. = 0		; back to the boot sector origin

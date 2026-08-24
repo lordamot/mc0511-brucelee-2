@@ -1,0 +1,832 @@
+; ------------------------------------------------------------------
+; Entity state machine: driver, state handlers, combat, death
+; (faithful ports of ZX D24E..D2E9, CD9B..D24D, D371..D404, D1EB,
+; CAE2, CAF7).  R0 = entity record throughout; handlers return the
+; new state in R1.
+; ------------------------------------------------------------------
+
+; ---- driver (ZX D24E) --------------------------------------------
+ENT_STEP:	MOVB	E.DEATH(R0),R1
+		BIC	#177400,R1
+		BEQ	ES_ALIVE
+		INC	R1			; death sequence
+		MOVB	R1,E.DEATH(R0)
+		CMP	R1,#2
+		BNE	1$
+		CMP	R0,#BRUCE		; at 2: Bruce jumps the counter
+		BNE	1$			; and the death jingle plays
+		MOVB	#113,E.DEATH(R0)
+		TST	SOUND_ON
+		BEQ	1$
+		MOV	#1,SND_REQ
+1$:		MOVB	E.DEATH(R0),R1		; flicker: bit 1 hides the body
+		BIT	#2,R1
+		BEQ	2$
+		CLRB	E.STATE(R0)
+		RETURN
+2$:		MOVB	E.SAVED(R0),E.STATE(R0)
+		RETURN
+
+ES_ALIVE:	DECB	E.TICK(R0)
+		BEQ	1$
+		RETURN
+1$:		MOVB	E.RELOAD(R0),E.TICK(R0)
+		MOVB	E.STATE(R0),R1
+		BIC	#177400,R1
+		BEQ	ENT_RESPAWN		; hidden enemy: respawn logic
+		CALL	AI_CMD			; command from input or AI
+		MOVB	R1,E.CMD(R0)
+		CALL	SPECIAL_SCAN		; pickups / deadly tiles / exits
+		MOVB	E.COL(R0),ES_OCOL	; old position for the clamps
+		MOVB	E.ROW(R0),ES_OROW
+		MOVB	E.STATE(R0),R1
+		BIC	#177400,R1
+		MOV	R1,R3			; handler from the state table
+		DEC	R3
+		ASL	R3
+		ASL	R3
+		ADD	E.STB(R0),R3
+		CALL	@2(R3)			; -> new state in R1
+		MOVB	R1,E.STATE(R0)
+		MOVB	E.COL(R0),R1		; CCOL = min(old,new,34)
+		BIC	#177400,R1
+		CMPB	R1,ES_OCOL
+		BLOS	2$
+		MOVB	ES_OCOL,R1
+2$:		CMP	R1,#34
+		BLOS	3$
+		MOV	#34,R1
+3$:		MOVB	R1,E.CCOL(R0)
+		MOVB	E.ROW(R0),R1		; CROW = min(old,new,23), >= 2
+		BIC	#177400,R1
+		CMPB	R1,ES_OROW
+		BLOS	4$
+		MOVB	ES_OROW,R1
+4$:		CMP	R1,#23
+		BLOS	5$
+		MOV	#23,R1
+5$:		CMP	R1,#2
+		BHIS	6$
+		MOV	#2,R1
+6$:		MOVB	R1,E.CROW(R0)
+		RETURN
+ES_OCOL:	.WORD	0
+ES_OROW:	.WORD	0
+
+; hidden enemy: count down and re-enter at the door (ZX D2EB)
+ENT_RESPAWN:	CMP	R0,#BRUCE
+		BNE	1$
+		RETURN
+1$:		MOV	#HDR+H.SPAWNA+2,R3	; flags of the active spawn
+		MOVB	BRUCE+E.ROW,R1
+		BIC	#177400,R1
+		CMP	R1,#22			; Bruce low -> spawn A
+		BHIS	2$
+		MOV	#HDR+H.SPAWNB+2,R3
+2$:		BITB	#200,(R3)		; enemies blocked here?
+		BEQ	3$
+		RETURN
+3$:		DECB	E.RESPAWN(R0)
+		BEQ	4$
+		RETURN
+4$:		MOVB	(R3),R1			; enter: facing from the flags
+		BIC	#177776,R1
+		MOVB	R1,E.FACE(R0)
+		MOVB	-1(R3),E.ROW(R0)
+		MOVB	-2(R3),E.COL(R0)
+		MOVB	#1,E.TICK(R0)
+		MOVB	#1,E.STATE(R0)
+		CLRB	E.YOFF(R0)
+		CLRB	E.DEATH(R0)
+		CMP	R0,#YAMO		; Yamo hangs back at first
+		BNE	5$
+		MOVB	#113,E.TICK(R0)
+5$:		RETURN
+
+; ---- footstep sound wrapper (ZX CEE9): Bruce's walk tick ---------
+STEP_SND:	CMP	R0,#BRUCE
+		BNE	9$
+		TST	SOUND_ON
+		BEQ	9$
+		MOV	#4,SND_REQ
+9$:		RETURN
+
+; ------------------------------------------------------------------
+; state handlers.  In: R0 = entity, E.CMD = command.  Out: R1 = state.
+; commands: 1 right, 2 left, 4 down, 10 up, 11/12 up-diagonal,
+; 20 attack (octal; ZX 9/0xA = 11/12, 0x10 = 20).
+; ------------------------------------------------------------------
+
+; stand / turn / dispatch (ZX CD9B)
+H_STAND:	CLRB	E.C12(R0)
+		CLRB	E.C13(R0)
+		CMP	R0,#NINJA		; the ninja never jumps
+		BEQ	HS_GROUND
+		MOVB	E.CMD(R0),R1
+		BIC	#177400,R1
+		CMP	R1,#11			; up+right: face right, run
+		BNE	1$
+		CLRB	E.FACE(R0)
+		MOV	#2,R1
+		JMP	STEP_RET
+1$:		CMP	R1,#12			; up+left
+		BNE	HS_GROUND
+		MOVB	#1,E.FACE(R0)
+		MOV	#2,R1
+		JMP	STEP_RET
+
+HS_GROUND:	CALL	FLOOR_CHK
+		BEQ	HS_FLOOR
+		CALL	CLIMB_CHK		; in the air: ladder or fall
+		BNE	1$
+		MOV	#16,R1			; -> climb
+		RETURN
+1$:		CMP	R0,#NINJA
+		BEQ	2$
+		MOVB	#1,E.FACE(R0)
+2$:		MOV	#21,R1			; -> falling
+		RETURN
+
+HS_FLOOR:	MOVB	E.CMD(R0),R1
+		BIC	#177400,R1
+		CMP	R1,#20			; attack: the sweeping kick
+		BNE	2$
+		CALL	SIDE_BLK
+		BNE	1$
+		MOV	#1,R1			; blocked: stay standing
+		RETURN
+1$:		BITB	#1,E.FACE(R0)
+		BEQ	11$
+		DECB	E.COL(R0)
+11$:		MOV	#26,R1			; -> kick strike
+		RETURN
+2$:		CMP	R1,#1			; walk right
+		BNE	3$
+		BITB	#1,E.FACE(R0)
+		BNE	21$
+		MOV	#2,R1
+		RETURN
+21$:		CLRB	E.FACE(R0)		; turn around first
+		MOV	#1,R1
+		RETURN
+3$:		CMP	R1,#2			; walk left
+		BNE	4$
+		BITB	#1,E.FACE(R0)
+		BEQ	31$
+		MOV	#2,R1
+		RETURN
+31$:		MOVB	#1,E.FACE(R0)
+		MOV	#1,R1
+		RETURN
+4$:		CMP	R1,#10			; up: leap
+		BNE	5$
+		MOV	#14,R1
+		RETURN
+5$:		CMP	R1,#4			; down: descend / crouch
+		BEQ	6$
+		MOV	#1,R1
+		RETURN
+6$:		CMP	R0,#BRUCE
+		BEQ	61$
+		MOV	#1,R1
+		RETURN
+61$:		CALL	RIGHT_BLK
+		BNE	62$
+		CALL	LEFT_BLK
+		BEQ	63$
+		DECB	E.COL(R0)
+62$:		INCB	E.ROW(R0)
+		INCB	E.ROW(R0)
+		MOV	#10,R1			; -> on the ladder, going down
+		RETURN
+63$:		MOV	#1,R1
+		RETURN
+
+STEP_RET:	MOV	R1,-(SP)		; footstep + return state R1
+		CALL	STEP_SND
+		MOV	(SP)+,R1
+		RETURN
+
+; walking (ZX CE48)
+H_WALK:		CLRB	E.C12(R0)
+		CALL	FLOOR_CHK
+		BEQ	1$
+		JMP	HW_AIR			; walked off an edge
+1$:		BITB	#1,E.FACE(R0)
+		BNE	HW_LEFT
+		CALL	RIGHT_BLK
+		BEQ	HW_STOP
+		MOVB	E.CMD(R0),R1
+		BIC	#177400,R1
+		CMP	R1,#1
+		BNE	2$
+		INCB	E.COL(R0)		; straight on
+		MOV	#3,R1
+		JMP	STEP_RET
+2$:		CMP	R0,#BRUCE
+		BNE	HW_STOP
+		CMP	R1,#11			; up-diagonal: running leap
+		BNE	3$
+		MOVB	E.C13(R0),R2
+		BIC	#177400,R2
+		CMP	R2,#2			; needs two steps of run-up
+		BLO	21$
+		CALL	RIGHT_BLK
+		BEQ	HW_STOP
+		MOV	#4,R1			; -> flying leap
+		RETURN
+21$:		MOV	#3,R1
+		INCB	E.COL(R0)
+		JMP	STEP_RET
+3$:		CMP	R1,#10			; up mid-walk: vault
+		BNE	HW_STOP
+		CALL	HEAD_CHK
+		BEQ	21$
+		DECB	E.ROW(R0)
+		MOVB	#7,E.YOFF(R0)
+		MOV	#12,R1			; -> jump arc
+		RETURN
+HW_STOP:	MOV	#1,R1
+		RETURN
+
+HW_LEFT:	CALL	LEFT_BLK
+		BEQ	HW_STOP
+		MOVB	E.CMD(R0),R1
+		BIC	#177400,R1
+		CMP	R1,#2
+		BNE	2$
+		DECB	E.COL(R0)
+		MOV	#3,R1
+		JMP	STEP_RET
+2$:		CMP	R0,#BRUCE
+		BNE	HW_STOP
+		CMP	R1,#12
+		BNE	3$
+		MOVB	E.C13(R0),R2
+		BIC	#177400,R2
+		CMP	R2,#2
+		BLO	21$
+		CALL	LEFT_BLK
+		BEQ	HW_STOP
+		DECB	E.COL(R0)
+		MOV	#4,R1			; -> flying leap
+		RETURN
+21$:		MOV	#3,R1
+		DECB	E.COL(R0)
+		JMP	STEP_RET
+3$:		CMP	R1,#10
+		BNE	HW_STOP
+		CALL	HEAD_CHK
+		BEQ	21$
+		DECB	E.COL(R0)
+		DECB	E.ROW(R0)
+		MOVB	#7,E.YOFF(R0)
+		MOV	#12,R1
+		RETURN
+
+HW_AIR:		CALL	CLIMB_CHK		; no floor mid-walk
+		BNE	1$
+		MOV	#16,R1			; ladder caught
+		RETURN
+1$:		CALL	FALL_ENTER
+		MOV	#16,R1
+		CMP	R2,#0			; (FALL_ENTER decided)
+		BNE	2$
+		MOV	#21,R1
+2$:		RETURN
+
+; entering a fall (ZX CDCD..CDE1 tail shared): R2 = 1 if ladder
+FALL_ENTER:	CLR	R2
+		CMP	R0,#NINJA
+		BEQ	1$
+		MOVB	#1,E.FACE(R0)
+1$:		RETURN
+
+; second walk phase (ZX CF04)
+H_STEP:		CALL	FLOOR_CHK
+		BEQ	1$
+		CALL	CLIMB_CHK
+		BNE	2$
+		MOV	#16,R1
+		RETURN
+2$:		CMP	R0,#NINJA
+		BEQ	3$
+		MOVB	#1,E.FACE(R0)
+3$:		MOV	#21,R1
+		RETURN
+1$:		INCB	E.C13(R0)
+		MOV	#2,R1
+		RETURN
+
+; flying leap, rising (ZX CF18 is the strike variant for Yamo; for
+; Bruce state 4 handler CF18 applies punches) - see H_PUNCH below.
+H_PUNCH:	MOV	#NINJA,R2		; hit everyone adjacent
+		MOV	#10.,R3
+		CALL	APPLY_HIT
+		MOV	#YAMO,R2
+		MOV	#10.,R3
+		CALL	APPLY_HIT
+		MOV	#BRUCE,R2
+		MOV	#10.,R3
+		CALL	APPLY_HIT
+		MOV	#5,R1
+		RETURN
+
+; punch recovery / leap continuation (ZX CF2D)
+H_PUNCH2:	INCB	E.C12(R0)
+		MOVB	E.C12(R0),R1
+		BIC	#177400,R1
+		CMP	R1,#4
+		BHIS	2$
+		BITB	#1,E.FACE(R0)
+		BNE	1$
+		CALL	RIGHT_BLK
+		BEQ	2$
+		INCB	E.COL(R0)
+		BR	3$
+1$:		CALL	LEFT_BLK
+		BEQ	2$
+		DECB	E.COL(R0)
+3$:		MOV	#4,R1
+		RETURN
+2$:		CLRB	E.C13(R0)
+		MOV	#2,R1
+		RETURN
+
+; crouch / descend start (ZX CF59)
+H_DUCK:		CLRB	E.YOFF(R0)
+		CALL	FLOOR_CHK
+		BEQ	1$
+		INCB	E.ROW(R0)
+1$:		MOVB	E.C12(R0),R1
+		BIC	#177400,R1
+		CMP	R1,#2
+		BNE	4$
+		MOVB	#24,E.TICK(R0)		; long pause at the bottom
+		CALL	DMG_CHECK
+		BCC	3$
+		DECB	E.ROW(R0)		; stand up (frame is taller)
+		CMP	R0,#BRUCE
+		BEQ	2$
+		MOVB	#62,E.TICK(R0)		; enemies pause after landing
+2$:		MOV	#1,R1
+		RETURN
+3$:		MOV	#6,R1
+		MOVB	#6,E.SAVED(R0)
+		RETURN
+4$:		MOVB	#3,E.TICK(R0)
+		BITB	#1,E.FACE(R0)
+		BNE	5$
+		CALL	LEFT_EDGE
+		BEQ	7$
+		DECB	E.COL(R0)
+		BR	6$
+5$:		CALL	RIGHT_EDGE
+		BEQ	7$
+		INCB	E.COL(R0)
+6$:		MOV	#7,R1
+		RETURN
+7$:		MOVB	#2,E.C12(R0)
+		MOV	#6,R1
+		RETURN
+
+; crouch walk (ZX CFB3)
+H_DUCKWALK:	INCB	E.C12(R0)
+		MOVB	#3,E.TICK(R0)
+		MOV	#6,R1
+		RETURN
+
+; on the ladder after descending (ZX CFBD)
+H_CLIMBUP:	MOVB	E.CMD(R0),R1
+		BIC	#177400,R1
+		CMP	R1,#4
+		BNE	1$
+		MOV	#10,R1			; keep holding
+		RETURN
+1$:		DECB	E.ROW(R0)
+		DECB	E.ROW(R0)
+		MOV	#1,R1
+		RETURN
+
+; jump straight up (ZX CFCE)
+H_JUMPUP:	CALL	JUMP_ARC
+		TST	R1
+		BEQ	2$
+		BITB	#1,E.FACE(R0)
+		BNE	1$
+		CALL	RIGHT_BLK
+		BEQ	2$
+		BR	3$
+1$:		CALL	LEFT_BLK
+		BEQ	2$
+		DECB	E.COL(R0)
+3$:		MOV	#12,R1
+		RETURN
+2$:		INCB	E.ROW(R0)
+		CLRB	E.YOFF(R0)
+		MOV	#2,R1
+		JMP	STEP_RET
+
+; forward jump (ZX CFF8)
+H_JUMPFWD:	CALL	JUMP_ARC
+		BITB	#1,E.FACE(R0)
+		BNE	1$
+		INCB	E.COL(R0)
+1$:		MOV	#11,R1
+		RETURN
+
+; jump arc table step (ZX D007): E.C12 indexes the height profile
+JUMP_ARC:	INCB	E.C12(R0)
+		MOVB	E.C12(R0),R1
+		BIC	#177400,R1
+		CMP	R1,#12.
+		BLOS	1$
+		MOV	#12.,R1
+1$:		MOVB	JUMPTAB(R1),R2
+		MOVB	R2,E.YOFF(R0)
+		MOV	R2,R1			; result: yoff (0 = done)
+		BIC	#177400,R1
+		RETURN
+JUMPTAB:	.BYTE	0,7,5,3,2,1,1,2,3,5,7,0,0
+		.EVEN
+
+; jump arc continuation (ZX D023)
+H_JUMPFWD2:	MOVB	#12,E.TICK(R0)
+		BITB	#1,E.FACE(R0)
+		BNE	1$
+		INCB	E.COL(R0)
+1$:		MOV	#1,R1
+		RETURN
+
+; leap start: check headroom (ZX D032)
+H_HANG:		MOVB	#6,E.TICK(R0)
+		CALL	HEAD_CHK
+		BNE	1$
+		MOV	#1,R1
+		RETURN
+1$:		MOV	#22,R1
+		RETURN
+
+; falling with the arc (ZX D03F)
+H_FALL:		CALL	JUMP_ARC
+		TST	R1
+		BEQ	2$
+		MOVB	E.C12(R0),R1
+		BIC	#177400,R1
+		CMP	R1,#3
+		BNE	1$
+		CALL	CLIMB_CHK
+		BEQ	3$
+1$:		MOV	#15,R1
+		RETURN
+2$:		INCB	E.ROW(R0)
+		MOVB	#7,E.TICK(R0)
+		MOV	#1,R1
+		RETURN
+3$:		CLRB	E.YOFF(R0)
+		MOV	#16,R1
+		RETURN
+
+; ladder climbing (ZX D063): move by 4-pixel half steps
+H_CLIMB:	MOVB	E.STATE(R0),-(SP)
+		CALL	CLIMB_CHK
+		BEQ	1$
+		MOVB	(SP)+,R1		; slipped off: hold the pose,
+		MOVB	E.YOFF(R0),R1		; drop into the fall states
+		BIC	#177400,R1
+		CLRB	E.YOFF(R0)
+		BEQ	11$
+		INCB	E.ROW(R0)
+11$:		MOV	#21,R1
+		RETURN
+1$:		MOVB	E.CMD(R0),R1
+		BIC	#177400,R1
+		CMP	R1,#10			; up
+		BNE	4$
+		MOVB	E.YOFF(R0),R1
+		BIC	#177400,R1
+		CMP	R1,#4
+		BHIS	2$
+		CALL	HEAD_CHK		; about to leave the top?
+		BNE	2$
+		MOVB	(SP)+,R1
+		RETURN
+2$:		MOVB	E.YOFF(R0),R1
+		SUB	#4,R1
+		BHIS	3$
+		DECB	E.ROW(R0)
+3$:		BIC	#177771,R1		; keep it 0 or 6.. (and 6)
+		BICB	#177400,R1
+		MOVB	R1,E.YOFF(R0)
+		MOVB	E.FACE(R0),R1		; alternate the grip
+		INC	R1
+		BIC	#177776,R1
+		MOVB	R1,E.FACE(R0)
+		MOVB	#10,E.TICK(R0)
+		MOVB	(SP)+,R1
+		MOV	#17,R1			; wait: use climb pose pair
+		RETURN
+4$:		CMP	R1,#4			; down
+		BNE	6$
+		CALL	GET_DIMS		; reached the floor below?
+		MOVB	E.ROW(R0),R1
+		BIC	#177400,R1
+		ADD	DIMSH,R1
+		CMP	R1,#27
+		BHIS	5$
+		MOVB	E.YOFF(R0),R1
+		ADD	#4,R1
+		BIC	#177771,R1
+		BICB	#177400,R1
+		MOVB	R1,E.YOFF(R0)
+		BNE	5$
+		INCB	E.ROW(R0)
+5$:		MOVB	(SP)+,R1
+		RETURN
+6$:		CMP	R1,#1			; walk off the ladder
+		BEQ	7$
+		CMP	R1,#2
+		BEQ	8$
+		MOVB	(SP)+,R1
+		RETURN
+7$:		TST	(SP)+
+		MOVB	E.YOFF(R0),R1
+		BIC	#177400,R1
+		BNE	71$
+		CALL	RIGHT_BLK
+		BEQ	72$
+		MOV	#17,R1
+		CLRB	E.FACE(R0)
+		INCB	E.COL(R0)
+		RETURN
+71$:		INCB	E.ROW(R0)
+72$:		CLRB	E.YOFF(R0)
+		MOV	#16,R1
+		RETURN
+8$:		TST	(SP)+
+		MOVB	E.YOFF(R0),R1
+		BIC	#177400,R1
+		BNE	81$
+		CALL	LEFT_BLK
+		BEQ	72$
+		MOV	#17,R1
+		MOVB	#1,E.FACE(R0)
+		DECB	E.COL(R0)
+		RETURN
+81$:		INCB	E.ROW(R0)
+		BR	72$
+
+; climb pose 2 (ZX D10D): same handler, other frame
+H_CLIMB2:	JMP	H_CLIMB
+
+; airborne fall (ZX D112)
+H_FALLING:	MOVB	E.YOFF(R0),R1
+		BIC	#177400,R1
+		BEQ	2$
+		ADD	#2,R1
+		BIC	#177771,R1
+		MOVB	R1,E.YOFF(R0)
+		BNE	1$
+		INCB	E.ROW(R0)
+1$:		MOVB	#2,E.TICK(R0)
+		MOV	#21,R1
+		RETURN
+2$:		CALL	FLOOR_CHK
+		BNE	3$
+		MOV	#6,R1			; landed: crouch absorb
+		MOVB	#2,E.TICK(R0)
+		JMP	STEP_RET
+3$:		MOVB	#2,E.YOFF(R0)
+		MOVB	#2,E.TICK(R0)
+		MOV	#21,R1
+		RETURN
+
+; knocked start of a backwards jump (ZX D15D)
+H_KNOCKDOWN:	DECB	E.ROW(R0)
+		MOVB	#7,E.YOFF(R0)
+		CLRB	E.C12(R0)
+		MOV	#15,R1
+		RETURN
+
+; staggering from a hit (ZX D16F)
+H_STAGGER:	MOVB	E.DMG(R0),R1
+		BIC	#177400,R1
+		CMP	R1,#12.
+		BHIS	HSTAG_HARD
+		MOVB	#12,E.TICK(R0)
+		BITB	#1,E.FACE(R0)
+		BNE	1$
+		CALL	LEFT_EDGE
+		BEQ	2$
+		DECB	E.COL(R0)
+		BR	3$
+1$:		CALL	RIGHT_EDGE
+		BEQ	2$
+		INCB	E.COL(R0)
+3$:		MOV	#24,R1
+		RETURN
+2$:		MOV	#1,R1
+		CALL	DMG_CHECK
+		RETURN
+
+HSTAG_HARD:	CLRB	E.C12(R0)		; a heavy hit: thrown off
+		MOVB	#3,E.TICK(R0)
+		BITB	#1,E.FACE(R0)
+		BNE	1$
+		CALL	LEFT_EDGE
+		BEQ	4$
+		DECB	E.COL(R0)
+		BR	2$
+1$:		CALL	RIGHT_EDGE
+		BEQ	4$
+		INCB	E.COL(R0)
+2$:		MOVB	#6,E.STATE(R0)
+		CALL	FLOOR_CHK
+		BEQ	3$
+		INCB	E.ROW(R0)
+3$:		CLRB	E.YOFF(R0)
+		MOV	#6,R1
+		RETURN
+4$:		CALL	DMG_CHECK
+		MOV	#1,R1
+		RETURN
+
+; stagger recovery (ZX D198)
+H_STAGGER2:	CALL	DMG_CHECK
+		MOV	#1,R1
+		MOVB	#1,E.SAVED(R0)
+		RETURN
+
+; thrown flying (ZX D1A2)
+H_THROWN:	CLRB	E.C12(R0)
+		MOVB	#3,E.TICK(R0)
+		BITB	#1,E.FACE(R0)
+		BNE	1$
+		CALL	LEFT_EDGE
+		BEQ	2$
+		DECB	E.COL(R0)
+		MOVB	#6,E.STATE(R0)
+		BR	3$
+1$:		CALL	RIGHT_EDGE
+		BEQ	2$
+		INCB	E.COL(R0)
+		MOVB	#6,E.STATE(R0)
+3$:		CALL	FLOOR_CHK
+		BEQ	31$
+		INCB	E.ROW(R0)
+31$:		CLRB	E.YOFF(R0)
+		MOV	#6,R1
+		RETURN
+2$:		CALL	DMG_CHECK
+		MOV	#1,R1
+		RETURN
+
+; frozen pose (victory chamber): keep the state
+H_NOP:		MOVB	E.STATE(R0),R1
+		BIC	#177400,R1
+		RETURN
+
+; the sweeping kick: strikes everyone (ZX D1D2)
+H_KICK:		MOV	#NINJA,R2
+		MOV	#11.,R3
+		CALL	APPLY_HIT
+		MOV	#YAMO,R2
+		MOV	#11.,R3
+		CALL	APPLY_HIT
+		MOV	#BRUCE,R2
+		MOV	#11.,R3
+		CALL	APPLY_HIT
+		MOVB	#17,E.TICK(R0)
+		MOV	#13,R1
+		RETURN
+
+; ------------------------------------------------------------------
+; combat: entity R0 hits entity R2 with strength R3 (ZX D371):
+; only when alive, on the same row (or one above) and adjacent in
+; the facing direction; the victim staggers and takes damage.
+APPLY_HIT:	CMP	R0,R2			; not oneself
+		BNE	1$
+		RETURN
+1$:		TSTB	E.DEATH(R2)
+		BEQ	2$
+		RETURN
+2$:		TSTB	E.STATE(R2)
+		BNE	3$
+		RETURN
+3$:		MOVB	E.ROW(R0),R1		; same row or victim one up
+		BIC	#177400,R1
+		MOVB	E.ROW(R2),R4
+		BIC	#177400,R4
+		CMP	R1,R4
+		BEQ	4$
+		DEC	R1
+		CMP	R1,R4
+		BEQ	4$
+		RETURN
+4$:		MOVB	E.COL(R0),R1
+		BIC	#177400,R1
+		MOVB	E.COL(R2),R4
+		BIC	#177400,R4
+		BITB	#1,E.FACE(R0)
+		BNE	6$
+		INC	R1			; striking right: col+1 / col+2
+		CMP	R1,R4
+		BEQ	5$
+		INC	R1
+		CMP	R1,R4
+		BEQ	5$
+		RETURN
+5$:		MOVB	#1,E.FACE(R2)		; face the attacker
+		BR	7$
+6$:		DEC	R1			; striking left
+		CMP	R1,R4
+		BEQ	61$
+		DEC	R1
+		CMP	R1,R4
+		BEQ	61$
+		RETURN
+61$:		CLRB	E.FACE(R2)
+7$:		MOVB	E.DMG(R2),R1		; damage; the ninja's blows
+		BIC	#177400,R1		; are weaker (not doubled)
+		ADD	R3,R1
+		CMP	R0,#NINJA
+		BEQ	8$
+		ADD	R3,R1
+8$:		MOVB	R1,E.DMG(R2)
+		MOVB	#23,E.STATE(R2)		; stagger
+		MOVB	#1,E.TICK(R2)
+		TST	SOUND_ON
+		BEQ	9$
+		MOV	#3,SND_REQ		; the thud
+9$:		CMP	R2,#BRUCE
+		BNE	10$
+		MOVB	R3,E.HITSTR(R2)
+10$:		CMP	R3,#10.
+		BNE	11$
+		MOVB	#3,E.C12(R0)
+11$:		RETURN
+
+; damage check after a stagger (ZX D1EB): dying at 53. (35. for the
+; ninja); scores for hits and kills.  C = still alive.
+DMG_CHECK:	MOVB	E.DMG(R0),R1
+		BIC	#177400,R1
+		MOV	#65,R2			; 53. damage kills
+		CMP	R0,#NINJA
+		BNE	1$
+		MOV	#43,R2			; the ninja: 35.
+1$:		CMP	R1,R2
+		BHIS	2$
+		CMP	R0,#BRUCE		; survived: hit bonus
+		BEQ	12$
+		MOVB	E.HITSTR(R0),R1
+		BIC	#177400,R1
+		BEQ	12$
+		MOV	#S_B100,R3
+		CMP	R1,#10.
+		BNE	11$
+		MOV	#S_B75,R3
+11$:		CALL	SCORE_ADD
+12$:		CLRB	E.HITSTR(R0)
+		SEC
+		RETURN
+2$:		MOVB	#1,E.DEATH(R0)		; going down
+		CLRB	E.DMG(R0)
+		CMP	R0,#BRUCE
+		BEQ	3$
+		MOV	#S_B200,R3		; kill bonus: 200 ninja,
+		CMP	R0,#NINJA		; 450 Yamo
+		BEQ	21$
+		MOV	#S_B450,R3
+21$:		CALL	SCORE_ADD
+3$:		CLRB	E.HITSTR(R0)
+		CLC
+		RETURN
+
+; ------------------------------------------------------------------
+; enemies falling off the bottom die (ZX CAF7)
+ENT_FALLOFF:	CALL	GET_DIMS
+		MOVB	E.ROW(R0),R1
+		BIC	#177400,R1
+		ADD	DIMSH,R1
+		CMP	R1,#27
+		BLO	9$
+		MOVB	E.YOFF(R0),R1
+		BIC	#177400,R1
+		CMP	R1,#4
+		BLO	9$
+		TSTB	E.DEATH(R0)
+		BNE	9$
+		MOVB	E.STATE(R0),E.SAVED(R0)
+		MOVB	#137,E.DEATH(R0)
+9$:		RETURN
+
+; dead enemy disappears and schedules a respawn (ZX CAE2)
+ENT_DEATH:	MOVB	E.DEATH(R0),R1
+		BIC	#177400,R1
+		CMP	R1,#144
+		BLO	9$
+		CLRB	E.STATE(R0)
+		CLRB	E.DEATH(R0)
+		MOVB	#62,E.RESPAWN(R0)
+		CALL	ENT_BLIT		; wipe the corpse off screen
+9$:		RETURN

@@ -1,0 +1,157 @@
+; ------------------------------------------------------------------
+; Score / lives / HUD (port of ZX C93C / C99B / CA1A / CA46).
+; Scores are 6-digit ASCII strings; lives ("falls") a 2-digit one.
+; ------------------------------------------------------------------
+
+; add the 6-ASCII-digit amount at R3 to the current player's score
+; (port of C99B): updates score, top score, extra-life check, HUD
+SCORE_ADD:	MOV	#SCORE1,R2
+		CMP	PLAYER,#1
+		BEQ	1$
+		MOV	#SCORE2,R2
+1$:		MOV	(R2),SCORETMP	; first two digits before the add
+		MOV	R2,-(SP)	; score base
+		ADD	#5,R2		; last digit
+		ADD	#5,R3
+		CLR	R4		; carry
+		MOV	#6,R1
+2$:		MOVB	(R2),R0
+		MOVB	(R3),R5
+		SUB	#60,R5
+		ADD	R5,R0
+		ADD	R4,R0
+		CLR	R4
+		CMP	R0,#71		; > '9'?
+		BLOS	3$
+		SUB	#12,R0
+		MOV	#1,R4
+3$:		MOVB	R0,(R2)
+		DEC	R2
+		DEC	R3
+		SOB	R1,2$
+		MOV	(SP)+,R2
+
+; update top score if beaten
+		MOV	R2,R3
+		MOV	#HUDTOP,R1
+		MOV	#6,R0
+4$:		CMPB	(R3),(R1)
+		BLO	SC_HUD		; lower - keep top
+		BHI	5$		; higher - copy
+		INC	R3
+		INC	R1
+		SOB	R0,4$
+		BR	SC_HUD
+5$:		MOV	R2,R3
+		MOV	#HUDTOP,R1
+		MOV	#6,R0
+6$:		MOVB	(R3)+,(R1)+
+		SOB	R0,6$
+
+; extra life when the 10000s digit crosses 3/6/9 (port of C9F9)
+SC_HUD:		CMP	(R2),SCORETMP
+		BEQ	7$
+		MOVB	1(R2),R0	; second digit (10000s)
+		CMPB	R0,#60
+		BEQ	7$
+		SUB	#61,R0		; 0 for '1'...
+		MOVB	(R2),R1
+		SUB	#60,R1
+		ADD	R1,R0		; tens+units of the 10000 count - 1
+		BR	SC_LIFE
+7$:		BR	HUD_DRAW
+
+SC_LIFE:	; R0 = (score/10000 - 1) mod misc: extra life on 3/6/9
+		INC	R0
+		MOV	R0,R1
+8$:		SUB	#3,R1
+		BEQ	9$
+		BHI	8$
+		BR	HUD_DRAW
+9$:		CALL	LIFE_INC
+		BR	HUD_DRAW
+
+; one more Bruce (port of CA1A): FALLS += 1, capped at 99
+LIFE_INC:	MOVB	HUDFALLS+1,R0
+		INC	R0
+		CMPB	R0,#72
+		BLO	1$
+		MOVB	HUDFALLS,R1
+		INC	R1
+		CMPB	R1,#72
+		BLO	0$
+		MOVB	#71,HUDFALLS
+		MOVB	#71,HUDFALLS+1
+		RETURN
+0$:		MOVB	R1,HUDFALLS
+		MOV	#60,R0
+1$:		MOVB	R0,HUDFALLS+1
+		RETURN
+
+; one Bruce less; Z set when none remain (port of CA46 head)
+LIFE_DEC:	MOVB	HUDFALLS,R0
+		BICB	#177760,R0
+		MOVB	HUDFALLS+1,R1
+		BICB	#177760,R1
+		BIS	R1,R0
+		BEQ	9$		; already 00
+		MOVB	HUDFALLS+1,R1
+		DECB	R1
+		CMPB	R1,#60
+		BHIS	1$
+		MOVB	#71,R1
+		DECB	HUDFALLS
+1$:		MOVB	R1,HUDFALLS+1
+		MOVB	HUDFALLS,R0
+		BICB	#177760,R0
+		MOVB	HUDFALLS+1,R1
+		BICB	#177760,R1
+		BIS	R1,R0
+9$:		RETURN
+
+; ------------------------------------------------------------------
+; rebuild the HUD text rows and draw them into the back buffer
+HUD_DRAW:	MOV	#HUDTEXT,R2	; "nUP SSSSSS  TOP TTTTTT  FALLS FF"
+		MOVB	PLAYER,R0
+		ADD	#60,R0
+		MOVB	R0,(R2)+	; player number
+		MOVB	#125,(R2)+	; 'U'
+		MOVB	#120,(R2)+	; 'P'
+		MOVB	#40,(R2)+
+		MOV	#SCORE1,R3
+		CMP	PLAYER,#1
+		BEQ	1$
+		MOV	#SCORE2,R3
+1$:		MOV	#6,R1
+2$:		MOVB	(R3)+,(R2)+
+		SOB	R1,2$
+		MOV	#S_HUDMID,R3	; "  TOP " - from strings
+		CALL	HUD_PART
+		MOV	#6,R1		; (HUDTOP already in place)
+		ADD	#6,R2
+		MOV	#S_HUDFAL,R3	; "  FALLS "
+		CALL	HUD_PART
+		ADD	#2,R2		; (HUDFALLS in place)
+		MOV	#40,R1		; second row: spaces
+3$:		MOVB	#40,(R2)+
+		SOB	R1,3$
+
+		CLR	R0		; draw 64 chars at cell rows 0-1
+		MOV	#HUDTEXT,R2
+4$:		MOVB	(R2)+,R1
+		BIC	#177400,R1
+		MOV	R0,-(SP)
+		MOV	R2,-(SP)
+		CALL	CHAR_TO_BUF
+		MOV	(SP)+,R2
+		MOV	(SP)+,R0
+		INC	R0
+		CMP	R0,#100
+		BLO	4$
+		RETURN
+
+HUD_PART:	MOVB	(R3)+,R0	; copy string R3 (0-term) to (R2)
+		BEQ	9$
+		MOVB	R0,(R2)+
+		BR	HUD_PART
+9$:		RETURN

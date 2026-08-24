@@ -1,0 +1,36 @@
+# Module order for the game build = memory order of the final image.
+# tools/build_brucelee.py concatenates these into build/brucelee.mac
+# and assembles with bin/macro11.  boot.mac must stay first (pads
+# itself to 1000, where main.mac's MAIN_START region begins); nothing
+# may sit between ppu.mac's PP_START and ppu_end.mac's PP_END (that
+# block, including the music data, is copied into PPU RAM);
+# gamevars.mac and tail.mac close the layout.
+src/defs.mac
+src/gamevars.mac
+src/boot.mac
+src/main.mac
+src/menu.mac
+src/title.mac
+src/flow.mac
+src/game.mac
+src/chamber.mac
+src/entity.mac
+src/ai.mac
+src/collide.mac
+src/pickup.mac
+src/hazard.mac
+src/score.mac
+src/input.mac
+src/gfx.mac
+src/ppucomm.mac
+src/ppu.mac
+build/data_music.mac
+src/ppu_end.mac
+build/font8.mac
+build/strings.mac
+build/data_tiles.mac
+build/data_sprites.mac
+build/data_chambers.mac
+build/data_hud.mac
+build/data_title.mac
+src/tail.mac

@@ -1,0 +1,173 @@
+; ------------------------------------------------------------------
+; Movement commands: player input for Bruce (and a human Yamo),
+; chase AI for the computer enemies (port of ZX D675..D7AB).
+; In: R0 = entity.  Out: R1 = command.
+; ------------------------------------------------------------------
+
+AI_CMD:		CMP	R0,#BRUCE
+		BNE	1$
+		MOVB	CMD1,R1			; Bruce: the player
+		BIC	#177400,R1
+		RETURN
+1$:		CMP	R0,#YAMO
+		BNE	AI_THINK
+		TST	YAMO_HUMAN
+		BEQ	AI_THINK
+		MOVB	CMD2,R1			; the green giant: player 2
+		BIC	#177400,R1
+		RETURN
+
+AI_THINK:	MOVB	E.STATE(R0),R1
+		BIC	#177400,R1
+		CMP	R1,#4
+		BLO	AI_GROUND		; stand/walk states
+		CMP	R1,#14
+		BLO	AI_IDLE			; mid-move: nothing
+		CMP	R1,#20
+		BLO	AI_CLIMB		; on a ladder
+AI_IDLE:	CLR	R1
+		RETURN
+
+; on the ladder: keep climbing towards Bruce (ZX D6B2)
+AI_CLIMB:	CALL	HEAD_CHK
+		BEQ	AI_WALKDIR
+		MOVB	E.YOFF(R0),R1
+		BIC	#177400,R1
+		BNE	1$
+		CALL	LEFT_BLK
+		BEQ	11$
+		CALL	RIGHT_BLK
+		BEQ	11$
+		MOVB	BRUCE+E.ROW,R1
+		BIC	#177400,R1
+		MOVB	E.ROW(R0),R2
+		BIC	#177400,R2
+		CMP	R1,R2
+		BEQ	AI_ATTACK
+		BLO	1$			; Bruce above: climb on
+		BR	AI_WALKDIR
+11$:
+1$:		MOV	#10,R1			; up
+		RETURN
+
+; same row as Bruce: close in / strike (ZX D6D4/D6DD)
+AI_GROUND:	MOVB	BRUCE+E.ROW,R1
+		BIC	#177400,R1
+		MOVB	E.ROW(R0),R2
+		BIC	#177400,R2
+		CMP	R1,R2
+		BNE	AI_VERT
+AI_ATTACK:	MOVB	BRUCE+E.COL,R1
+		BIC	#177400,R1
+		MOVB	E.COL(R0),R2
+		BIC	#177400,R2
+		SUB	#2,R1			; two cells to his left?
+		CMP	R1,R2
+		BNE	1$
+		CLRB	E.FACE(R0)		; strike facing right
+		MOV	#20,R1
+		RETURN
+1$:		SUB	#2,R1
+		CMP	R1,R2
+		BNE	2$
+		MOV	#1,R1			; close the last step
+		RETURN
+2$:		ADD	#6,R1			; two cells to his right?
+		CMP	R1,R2
+		BNE	3$
+		MOVB	#1,E.FACE(R0)
+		MOV	#20,R1			; strike facing left
+		RETURN
+3$:		ADD	#2,R1
+		CMP	R1,R2
+		BNE	AI_WALKDIR
+		MOV	#2,R1
+		RETURN
+
+; walk towards Bruce, turning at walls and edges (ZX D710)
+AI_WALKDIR:	MOVB	BRUCE+E.COL,R1
+		BIC	#177400,R1
+		MOVB	E.COL(R0),R2
+		BIC	#177400,R2
+		CMP	R2,R1			; which side is he on?
+		BLOS	1$
+		BITB	#1,E.FACE(R0)		; Bruce left of us
+		BNE	AI_FWD
+		BR	AI_TURN
+1$:		BITB	#1,E.FACE(R0)		; Bruce right of us
+		BEQ	AI_FWD
+AI_TURN2:	BR	AI_TURN
+
+AI_FWD:		CALL	SIDE_EDGE
+		BEQ	AI_TURN
+		MOV	#1,R1			; forward
+		BITB	#1,E.FACE(R0)
+		BEQ	9$
+		MOV	#2,R1
+9$:		RETURN
+
+AI_TURN:	MOVB	E.FACE(R0),R1		; turn around, then pause
+		INC	R1
+		BIC	#177776,R1
+		MOVB	R1,E.FACE(R0)
+		MOVB	#62,E.TICK(R0)
+		CLR	R1
+		RETURN
+
+; different rows (ZX D742): try ladders (Yamo), wander, brawl with
+; the other enemy when in reach
+AI_VERT:	BLO	1$			; Bruce below?
+		CMP	R0,#YAMO		; Bruce above: Yamo climbs
+		BNE	1$
+		DECB	E.ROW(R0)
+		CALL	CLIMB_CHK
+		INCB	E.ROW(R0)
+		BNE	1$
+		MOV	#10,R1
+		RETURN
+1$:		CALL	RND
+		BIT	#3,R1
+		BNE	AI_FWD2
+		MOV	#NINJA+E.COL,R2		; pick a fight with the other
+		CMP	R0,#NINJA		; enemy standing beside us
+		BNE	2$
+		MOV	#YAMO+E.COL,R2
+2$:		MOVB	1(R2),R1		; same row?
+		BIC	#177400,R1
+		MOVB	E.ROW(R0),R3
+		BIC	#177400,R3
+		CMP	R1,R3
+		BNE	AI_FWD2
+		MOVB	(R2),R1
+		BIC	#177400,R1
+		MOVB	E.COL(R0),R3
+		BIC	#177400,R3
+		SUB	#2,R3			; two to our left
+		CMP	R1,R3
+		BNE	3$
+		MOVB	#1,E.FACE(R0)
+		MOV	#20,R1
+		RETURN
+3$:		ADD	#4,R3
+		CMP	R1,R3
+		BNE	AI_FWD2
+		CLRB	E.FACE(R0)
+		MOV	#20,R1
+		RETURN
+
+AI_FWD2:	CALL	SIDE_EDGE
+		BEQ	AI_TURN
+		MOV	#1,R1
+		BITB	#1,E.FACE(R0)
+		BEQ	9$
+		MOV	#2,R1
+9$:		RETURN
+
+; quick pseudo-random word in R1 (clobbers only R1)
+RND:		MOV	RNDSEED,R1
+		ADD	FRAMECNT,R1
+		SWAB	R1
+		ADD	#31415,R1
+		MOV	R1,RNDSEED
+		RETURN
+RNDSEED:	.WORD	17063

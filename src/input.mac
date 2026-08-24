@@ -1,0 +1,81 @@
+; ------------------------------------------------------------------
+; Input: translate the PPU key word into ZX-style movement commands
+; (bit 0 right, 1 left, 2 down, 3 up, 4 fire) with the two-frame
+; debounce latch of the original ISR (port of ZX C02D).
+; ------------------------------------------------------------------
+
+; key word bits -> command bits
+; KEYS: 0 up, 1 right, 2 down, 3 left, 5 fire (P1); +8 / bit13 (P2)
+KEY2CMD:	CLR	R2		; R1 = key nibble+fire -> R2 = cmd
+		BIT	#2,R1		; right
+		BEQ	1$
+		BIS	#1,R2
+1$:		BIT	#10,R1		; left
+		BEQ	2$
+		BIS	#2,R2
+2$:		BIT	#4,R1		; down
+		BEQ	3$
+		BIS	#4,R2
+3$:		BIT	#1,R1		; up
+		BEQ	4$
+		BIS	#10,R2
+4$:		BIT	#40,R1		; fire
+		BEQ	5$
+		BIS	#20,R2
+5$:		RETURN
+
+; per-frame scan (called from the vsync ISR)
+INPUT_SCAN:	MOV	KEYS_DATA,R0
+		MOV	R0,R1
+		BIC	#177700,R1	; P1 bits
+		CALL	KEY2CMD
+		CMPB	R2,PREV1	; stable for two frames -> latch
+		BNE	1$
+		MOVB	R2,LATCH1
+1$:		MOVB	R2,PREV1
+		TST	YAMO_HUMAN
+		BEQ	3$
+		MOV	R0,R1		; P2: arrows from the high byte,
+		SWAB	R1		; fire = bit 13 -> bit 5
+		BIC	#177720,R1
+		BIT	#040000,R0
+		BEQ	2$
+		BIS	#40,R1
+2$:		CALL	KEY2CMD
+		CMPB	R2,PREV2
+		BNE	22$
+		MOVB	R2,LATCH2
+22$:		MOVB	R2,PREV2
+3$:		MOVB	LATCH1,CMD1
+		MOVB	LATCH2,CMD2
+		TST	YAMO_HUMAN	; when players alternate and both
+		BEQ	9$		; options are on, player 2's keys
+		TST	TWOPLAYER	; drive Bruce on their turn
+		BEQ	9$
+		CMP	PLAYER,#2
+		BNE	9$
+		MOVB	LATCH2,CMD1
+		MOVB	LATCH1,CMD2
+9$:		RETURN
+
+; ------------------------------------------------------------------
+; edge-triggered menu key: returns R0 = key word bits once per press
+; (0 while held); re-arms when everything is released
+GET_KEY:	MOV	KEYS_DATA,R0
+		BNE	1$
+		CLR	KEY_ARMED	; all released - re-arm
+		CLR	R0
+		RETURN
+1$:		TST	KEY_ARMED
+		BEQ	2$
+		CLR	R0		; still held
+		RETURN
+2$:		MOV	#1,KEY_ARMED
+		RETURN
+
+KEY_ARMED:	.WORD	0
+
+; wait for vsync (consume one ISR bit)
+VSYNC:		ASR	VBLF
+		BCC	VSYNC
+		RETURN

@@ -1,0 +1,83 @@
+; ------------------------------------------------------------------
+; Title screen: the Ocean loading picture (src/res/pics/title.bmp,
+; encoded by tools/pic_conv.py), pulled from the disk at run time
+; through the resident boot-sector LOADER, shown with an 8-color
+; palette per cell row.  Plane 0 goes to the PPU (COMMAND_3), planes
+; 1+2 through the back buffer like everything else.
+; ------------------------------------------------------------------
+
+; disk layout - must match the manifest in tools/build_brucelee.py
+TITLE0_LBA = 80.		; plane-0 blob, 12 sectors
+TITLE0_SEC = 12.
+TITLE12_SEC = 24.		; planes 1+2 blob directly after it
+
+; load the title data while the PPU still runs the firmware (the
+; firmware K2 FDD service needs its main loop, which is gone once
+; our PPU program starts) - called from MAIN_START before
+; PP_MAIN_LOAD.  Planes 1+2 stay in the back buffer; the plane-0
+; blob is parked in a firmware-allocated PPU RAM block for
+; COMMAND_3 to copy into plane-0 VRAM later.
+TITLE_LOAD:	MOVB	#1,K2REQ	; allocate a PPU RAM block first
+		MOV	#3072.,K2ADDR2
+		CALL	K2SEND_WAIT
+		MOV	K2ADDR1,TITLE_PPBLK
+		MOV	#PARAMS_T0,R0	; plane 0 -> back buffer
+		CALL	LOADER
+		MOVB	#20,K2REQ	; copy back buffer -> PPU block
+		MOV	TITLE_PPBLK,K2ADDR1
+		MOV	#BUF,K2ADDR2
+		MOV	#3072.,K2ADDR3
+		CALL	K2SEND		; (no completion byte for command
+					; 20 - the channel serializes the
+					; following requests anyway)
+		MOV	#PARAMS_T12,R0	; planes 1+2 -> back buffer
+		CALL	LOADER
+		RETURN
+
+; K2SEND and wait for completion: the firmware serves the request
+; asynchronously and only then writes the result words + K2ERR=0
+K2SEND_WAIT:	MOVB	#377,K2ERR
+		CALL	K2SEND
+1$:		TSTB	K2ERR
+		BNE	1$
+		RETURN
+
+TITLE_SHOW:	MOV	#3,R0		; PPU: parked blob -> plane 0
+		CALL	SEND_PP_COMM
+		MOV	#TITLE_PALS,R1	; the picture's row palettes
+		CALL	SET_ROWPALS
+		CALL	BLIT_FULL
+		CLR	VBLF		; drop the frames the load pended
+		MOV	#500.,R2	; ~10 s, any key skips
+1$:		CALL	VSYNC
+		CALL	GET_KEY
+		TST	R0
+		BNE	2$
+		SOB	R2,1$
+2$:		CALL	CLEAR_BUF	; back to a black screen
+		CALL	BLIT_FULL
+		MOV	#5,R0		; PPU: clear plane 0 again
+		CALL	SEND_PP_COMM
+		BR	STD_ROWPALS	; restore the game palette
+
+; fill ROWPALS with the 24 word pairs at R1 and send them to the PPU
+SET_ROWPALS:	MOV	#ROWPALS,R2
+		MOV	#48.,R3
+1$:		MOV	(R1)+,(R2)+
+		SOB	R3,1$
+		MOV	#2,R0
+		CALL	SEND_PP_COMM
+		RETURN
+
+; the standard game palette in every row
+STD_ROWPALS:	MOV	#ROWPALS,R2
+		MOV	#24.,R3
+1$:		MOV	#135220,(R2)+
+		MOV	#177734,(R2)+
+		SOB	R3,1$
+		MOV	#2,R0
+		CALL	SEND_PP_COMM
+		RETURN
+
+PARAMS_T0:	.WORD	BUF,TITLE0_SEC,TITLE0_LBA
+PARAMS_T12:	.WORD	BUF,TITLE12_SEC,0	; 0 = continue from current LBA

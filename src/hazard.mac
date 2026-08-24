@@ -1,0 +1,683 @@
+; ------------------------------------------------------------------
+; Per-chamber frame handlers (ports of ZX D7AC table targets):
+; energy bolts (DE47/DF11 + DDFF oscillator), patrolling flames
+; (DDA8), tile animations (DF7A), the collapsing floor (DD0C), the
+; wizard (DC27) and the victory chamber (DD67).
+; ------------------------------------------------------------------
+
+HAZ_FRAME:	MOV	CHAMBER,R1
+		ASL	R1
+		CALL	@HZ_TAB(R1)
+		RETURN
+
+HZ_TAB:		.WORD	HZ_LAMP0,HZ_NONE,HZ_LAMP2,HZ_CH3,HZ_CH4
+		.WORD	HZ_DOORS,HZ_CH6,HZ_CH7,HZ_CH8,HZ_CH9
+		.WORD	HZ_CH10,HZ_CH11,HZ_DOORS,HZ_CH13,HZ_CH14
+		.WORD	HZ_CH15,HZ_NONE,HZ_CH17,HZ_CH18,HZ_CH19
+
+HZ_NONE:	RETURN
+HZ_DOORS:	CALL	DOOR_TICK
+		RETURN
+
+; ---- blinking lamp once the vault opens (ZX DA94/DAAD) -----------
+HZ_LAMP0:	MOV	#17*40+5,R2		; (col 5, row 15)
+		BR	HZ_LAMP
+HZ_LAMP2:	MOV	#17*40+32,R2		; (col 26, row 15)
+HZ_LAMP:	MOVB	CHCNT+30,R1
+		BIC	#177400,R1
+		BEQ	9$
+		INC	R1
+		BIS	#1,R1
+		MOVB	R1,CHCNT+30
+		MOV	#123,R3			; two lamp tiles alternate
+		BIT	#100,R1
+		BEQ	1$
+		MOV	#171,R3
+1$:		MOV	R0,-(SP)
+		MOV	R2,R0
+		MOV	R3,R1
+		CALL	PUT_TILE
+		MOV	(SP)+,R0
+9$:		RETURN
+
+; ---- bolt chambers ------------------------------------------------
+HZ_CH3:		CALL	BOLT_STEP
+		BNE	1$
+		MOV	#4*40+21,R2		; (col 17, row 4) 3 x 18
+		MOV	#3,R3
+		MOV	#22,R4
+		CALL	BOLT_DRAW
+1$:		JMP	TILE_ANIMS
+
+HZ_CH4:		CALL	BOLT_STEP
+		BNE	1$
+		MOV	#4*40+33,R2		; (col 27, row 4) 2 x 20
+		MOV	#2,R3
+		MOV	#24,R4
+		CALL	BOLT_DRAW
+1$:		JMP	TILE_ANIMS
+
+HZ_CH7:		CALL	BOLT_STEP
+		BNE	1$
+		MOV	#10*40+1,R2		; (1,8) 2 x 15
+		MOV	#2,R3
+		MOV	#17,R4
+		CALL	BOLT_DRAW
+		MOV	#4*40+16,R2		; (14,4) 4 x 18
+		MOV	#4,R3
+		MOV	#22,R4
+		CALL	BOLT_DRAW
+		MOV	#10*40+35,R2		; (29,8) 2 x 15
+		MOV	#2,R3
+		MOV	#17,R4
+		CALL	BOLT_DRAW
+1$:		JMP	TILE_ANIMS
+
+HZ_CH8:		CALL	BOLT_STEP
+		BNE	1$
+		MOV	#BOLTS8,R5
+2$:		MOV	(R5)+,R2
+		BEQ	1$
+		MOV	(R5)+,R3
+		MOV	(R5)+,R4
+		MOV	R5,-(SP)
+		CALL	BOLT_DRAW
+		MOV	(SP)+,R5
+		BR	2$
+1$:		MOVB	TICK99,R1
+		BIC	#177400,R1
+		CMP	R1,#2
+		BLO	9$
+		CLRB	TICK99
+		MOV	#PLANT2,R3
+		CMPB	CHCNT+32,#2
+		BNE	3$
+		MOV	#PLANT3,R3
+3$:		CALL	PLANT_STEP
+9$:		RETURN
+
+BOLTS8:		.WORD	15.*40+1,2,4,	11.*40+3,2,4,	9.*40+5,2,4
+		.WORD	7.*40+7,2,4,	7.*40+11,2,2,	11.*40+24,2,6
+		.WORD	9.*40+26,2,6,	7.*40+30,2,6,	7.*40+32,2,4
+		.WORD	4*40+35,2,23,	0
+
+; ---- chamber 9: the flashing barrier (ZX DBB0) -------------------
+HZ_CH9:		INCB	CHCNT+30
+		MOVB	CHCNT+30,R1
+		BIC	#177400,R1
+		MOV	#154,R2			; tile 6C / blank pair
+		MOV	#40,R3
+		CMP	R1,#100
+		BEQ	1$
+		MOV	#154,R3
+		MOV	#40,R2
+		CMP	R1,#300
+		BEQ	1$
+		RETURN
+1$:		MOV	R0,-(SP)
+		MOV	#11.*40+10,R0		; six cells at (8,9)
+		MOV	#6,R4
+2$:		MOV	R2,R1
+		MOV	R0,-(SP)
+		MOV	R4,-(SP)
+		CALL	PUT_TILE
+		MOV	(SP)+,R4
+		MOV	(SP)+,R0
+		INC	R0
+		SOB	R4,2$
+		MOV	#11.*40+20,R0		; six cells at (16,9)
+		MOV	#6,R4
+3$:		MOV	R3,R1
+		MOV	R0,-(SP)
+		MOV	R4,-(SP)
+		CALL	PUT_TILE
+		MOV	(SP)+,R4
+		MOV	(SP)+,R0
+		INC	R0
+		SOB	R4,3$
+		MOV	(SP)+,R0
+		RETURN
+
+HZ_CH6:		MOVB	TICK99,R1
+		BIC	#177400,R1
+		CMP	R1,#3
+		BLO	1$
+		CLRB	TICK99
+		MOV	#PLANT1,R3
+		CALL	PLANT_STEP
+1$:		CALL	DOOR_TICK
+		JMP	TILE_ANIMS
+
+HZ_CH10:	CALL	DOOR_TICK
+		JMP	TILE_ANIMS
+
+HZ_CH11:	CALL	BOLT_STEP
+		BNE	1$
+		MOV	#4*40+1,R2		; (1,4) 4 x 19
+		MOV	#4,R3
+		MOV	#23,R4
+		CALL	BOLT_DRAW
+1$:		CALL	DOOR_TICK
+		MOVB	BRUCE+E.COL,R1		; the trap floor at row 13
+		BIC	#177400,R1
+		CMP	R1,#10
+		BLO	9$
+		CMP	R1,#32
+		BHIS	9$
+		CMPB	BRUCE+E.ROW,#15
+		BNE	9$
+		TSTB	BRUCE+E.YOFF
+		BNE	9$
+		MOV	#1,EXITFLAG
+9$:		RETURN
+
+HZ_CH13:	BISB	#300,WIZL		; arm the wizard
+		CALL	DOOR_TICK
+		RETURN
+
+; ---- chamber 14: the wizard (ZX DC27) ----------------------------
+HZ_CH14:	MOVB	WIZL,R1
+		BIC	#177400,R1
+		BNE	1$
+		JMP	HZ_DOORS
+1$:		CMP	R1,#300			; out of hits: he is gone
+		BNE	2$
+		CLRB	WIZL
+		CALL	WIZ_CLEAR
+		JMP	HZ_DOORS
+2$:		BICB	#100,WIZL
+		BIT	#200,R1
+		BNE	3$
+		JMP	HZ_DOORS
+3$:		MOVB	BRUCE+E.ROW,R1		; touching his perch?
+		BIC	#177400,R1
+		CMP	R1,#21
+		BHIS	4$
+		JMP	HZ_DOORS
+4$:		CMPB	BRUCE+E.COL,#32
+		BEQ	5$
+		JMP	HZ_DOORS
+5$:		MOVB	WIZL,R1
+		BIC	#177770,R1
+		BNE	6$
+		JMP	HZ_DOORS
+6$:
+		DECB	WIZL			; a hit: HP down, a fall up
+		CALL	LIFE_INC
+		CALL	WIZ_CLEAR
+		JMP	HZ_DOORS
+
+WIZ_CLEAR:	MOV	R0,-(SP)		; blank his cells (29..30,18..22)
+		MOV	#22.*40+35,R0
+		MOV	#5,R5
+1$:		CLR	R1
+		MOV	R0,-(SP)
+		MOV	R5,-(SP)
+		CALL	PUT_TILE
+		MOV	(SP),R5
+		MOV	2(SP),R0
+		INC	R0
+		CLR	R1
+		CALL	PUT_TILE
+		MOV	(SP)+,R5
+		MOV	(SP)+,R0
+		SUB	#40,R0			; a row up
+		SOB	R5,1$
+		MOV	(SP)+,R0
+		MOV	#1,REDRAW
+		RETURN
+
+HZ_CH15:	MOVB	TICK99,R1
+		BIC	#177400,R1
+		CMP	R1,#3
+		BLO	9$
+		CLRB	TICK99
+		MOV	#FLAMES15,R3
+		MOV	#8.,R2
+1$:		MOV	R2,-(SP)
+		MOV	R3,-(SP)
+		CALL	PLANT_STEP
+		MOV	(SP)+,R3
+		MOV	(SP)+,R2
+		ADD	#6,R3
+		SOB	R2,1$
+9$:		RETURN
+
+HZ_CH17:	MOVB	TICK99,R1
+		BIC	#177400,R1
+		CMP	R1,#3
+		BLO	1$
+		CLRB	TICK99
+		MOV	#PLANT4,R3
+		CALL	PLANT_STEP
+1$:		JMP	TILE_ANIMS
+
+; ---- chamber 18: the collapsing floor (ZX DD0C) ------------------
+HZ_CH18:	MOVB	FLOORST,R1
+		BIC	#177400,R1
+		INC	R1
+		CMP	R1,#247			; cycle restart
+		BEQ	HZ18_INIT
+		MOVB	R1,FLOORST
+		CMP	R1,#36			; 30 frames of warning
+		BLO	9$
+		MOV	R0,-(SP)
+		MOVB	FLOORCO+1,R0		; current cell (row, col)
+		BIC	#177400,R0
+		ASL	R0
+		ASL	R0
+		ASL	R0
+		ASL	R0
+		ASL	R0
+		MOVB	FLOORCO,R1
+		BIC	#177400,R1
+		BIC	#177740,R1
+		ADD	R1,R0
+		CALL	RESTORE_TILE		; heal the previous hole
+		MOVB	FLOORCO+1,R1
+		BIC	#177400,R1
+		INC	R1
+		CMP	R1,#25			; reached the bottom: restart
+		BLO	1$
+		CLRB	FLOORST
+		MOV	(SP)+,R0
+		RETURN
+1$:		MOVB	R1,FLOORCO+1
+		MOVB	FLOORDI,R1		; drift towards Bruce's side
+		MOVB	FLOORCO,R2		; (both sign-extend; the sum's
+		ADD	R2,R1			; low byte is the new column)
+		MOVB	R1,FLOORCO
+		MOVB	FLOORCO+1,R0
+		BIC	#177400,R0
+		ASL	R0
+		ASL	R0
+		ASL	R0
+		ASL	R0
+		ASL	R0
+		MOVB	FLOORCO,R1
+		BIC	#177740,R1
+		ADD	R1,R0
+		CALL	CRUMBLE
+		MOV	(SP)+,R0
+9$:		RETURN
+
+HZ18_INIT:	MOVB	#1,FLOORST
+		MOVB	#20,FLOORCO		; col 16
+		MOVB	#10,FLOORCO+1		; row 8
+		CLRB	FLOORDI			; direction from Bruce's column
+		MOVB	BRUCE+E.COL,R1
+		BIC	#177400,R1
+		CMP	R1,#12
+		BHIS	1$
+		MOVB	#377,FLOORDI
+		RETURN
+1$:		CMP	R1,#22
+		BLO	9$
+		MOVB	#1,FLOORDI
+9$:		RETURN
+
+; a crumbled cell: hole in the map, rubble on the screen
+CRUMBLE:	CLRB	MAPB(R0)
+		MOV	R0,-(SP)
+		MOV	#325,R1			; the rubble tile graphic
+		CALL	TILE_TO_BUF
+		MOV	(SP),R0
+		MOV	#1,R1
+		CALL	BLIT_CELLS
+		MOV	(SP)+,R0
+		RETURN
+
+; ---- chamber 19: victory (ZX DD67) -------------------------------
+HZ_CH19:	MOVB	CHCNT+34,R1
+		BIC	#177400,R1
+		INC	R1
+		MOVB	R1,CHCNT+34
+		CMP	R1,#1
+		BNE	1$
+		MOVB	#20,BRUCE+E.STATE	; freeze Bruce mid-pose
+		CLRB	BRUCE+E.CMD
+		MOV	R0,-(SP)
+		MOV	#40+6,R0		; second HUD row
+		MOV	#S_VICTORY,R3
+		CALL	PRINT_STR
+		MOV	(SP)+,R0
+		MOV	#1,REDRAW
+		MOV	#1,SND_MODE		; the tune
+		RETURN
+1$:		CMP	R1,#250.		; five seconds of glory
+		BNE	9$
+		CLR	SND_MODE
+		MOV	#1,HARDMODE
+		MOV	#2,VICTORYF
+9$:		RETURN
+
+VICTORYF:	.WORD	0
+
+; ------------------------------------------------------------------
+; the bolt oscillator (ZX DDFF): Z = take a movement step now
+BOLT_STEP:	TSTB	BRUCE+E.DEATH
+		BEQ	1$
+		CLZ
+		RETURN
+1$:		DECB	BOLTT
+		BEQ	2$
+		CLZ
+		RETURN
+2$:		MOVB	BOLTP,R1
+		BIC	#177400,R1
+		MOV	R1,R2
+		BIC	#177700,R2		; position 0..63
+		MOV	R2,R3
+		ASH	#-2,R3
+		ADD	#6,R3
+		MOVB	R3,BOLTT		; slower when low
+		BIT	#100,R1
+		BEQ	3$
+		DEC	R2			; moving up
+		BNE	5$
+		BIC	#100,R1
+		BR	5$
+3$:		INC	R2			; moving down
+		BIT	#100,R2
+		BEQ	5$
+		BIS	#100,R1			; turn around at the bottom
+		DEC	R2
+5$:		BIC	#77,R1
+		BIS	R2,R1
+		MOVB	R1,BOLTP
+		SEZ
+		RETURN
+
+; arm the bolt (ZX DE38/DE41)
+BOLT_ON:	MOVB	#20,BOLTT
+		MOVB	#310,BOLTP
+		RETURN
+BOLT_ON2:	MOVB	#20,BOLTT
+		MOVB	#110,BOLTP
+		RETURN
+
+; ------------------------------------------------------------------
+; draw one bolt step: scroll the buffer region one line vertically
+; (wrapping), push overlapping entities, blit.  R2 = cell offset,
+; R3 = width cells, R4 = height cell rows.
+BOLT_DRAW:	MOV	R0,-(SP)
+		MOV	R2,-(SP)
+		MOV	R3,-(SP)
+		MOV	R4,-(SP)
+		MOV	R2,R0
+		CALL	BUFADDR			; R2 -> buffer addr
+		MOV	R2,R0			; region top-left
+		MOV	(SP),R4			; height rows
+		ASL	R4			; *8 lines
+		ASL	R4
+		ASL	R4
+		MOV	2(SP),R3		; width cells
+BD_COL:		MOV	R0,R2			; per column word
+		MOV	R4,R5
+		BITB	#100,BOLTP		; direction by the phase
+		BNE	BD_UP
+		MOV	R4,R1			; down: start from the bottom
+		DEC	R1
+		MOV	R1,R5
+		ASH	#6,R1			; *64
+		ADD	R1,R2
+		MOV	(R2),-(SP)		; keep the bottom line
+2$:		MOV	-100(R2),(R2)
+		SUB	#100,R2
+		SOB	R5,2$
+		MOV	(SP)+,(R2)		; wraps to the top
+		BR	BD_NEXT
+BD_UP:		MOV	(R2),-(SP)		; up: keep the top line
+		DEC	R5
+3$:		MOV	100(R2),(R2)
+		ADD	#100,R2
+		SOB	R5,3$
+		MOV	(SP)+,(R2)
+BD_NEXT:	ADD	#2,R0			; next column
+		DEC	R3
+		BEQ	BD_DONE
+		JMP	BD_COL
+BD_DONE:
+		MOV	(SP)+,R4		; region params back
+		MOV	(SP)+,R3
+		MOV	(SP)+,R2
+		MOV	R2,BPOFF		; keep them for the push
+		MOV	R3,BPW
+		MOV	R4,BPH
+		MOV	R2,R0
+		MOV	R3,R1
+		MOV	R4,R2
+		CALL	BLIT_RECT
+		CALL	BOLT_PUSH
+		MOV	(SP)+,R0
+		RETURN
+
+BPOFF:		.WORD	0			; bolt region for the push
+BPW:		.WORD	0
+BPH:		.WORD	0
+
+; push entities caught in the bolt region (ZX DEA6/DF60)
+BOLT_PUSH:	MOV	#1,FREEZE
+		MOV	#NINJA,R0
+		CALL	BP_ONE
+		MOV	#YAMO,R0
+		CALL	BP_ONE
+		MOV	#BRUCE,R0
+		CALL	BP_ONE
+		RETURN
+
+BP_ONE:		TSTB	E.DEATH(R0)
+		BNE	BP_RET
+		TSTB	E.STATE(R0)
+		BEQ	BP_RET
+		CALL	GET_DIMS
+		MOV	BPOFF,R1
+		BIC	#177740,R1		; region col
+		MOV	BPOFF,R5
+		ASH	#-5,R5
+		BIC	#177700,R5		; region row
+		MOVB	E.COL(R0),R2
+		BIC	#177400,R2
+		MOV	R2,R3
+		ADD	DIMSW,R3		; entity right edge
+		CMP	R3,R1
+		BLOS	BP_RET			; entirely to the left
+		MOV	R1,R3
+		ADD	BPW,R3			; region right edge
+		CMP	R2,R3
+		BHIS	BP_RET			; entirely to the right
+		MOVB	E.ROW(R0),R2
+		BIC	#177400,R2
+		MOV	R2,R3
+		ADD	DIMSH,R3
+		CMP	R3,R5
+		BLOS	BP_RET			; above
+		MOV	R5,R3
+		ADD	BPH,R3
+		CMP	R2,R3
+		BHIS	BP_RET			; below
+		BITB	#100,BOLTP		; overlapping: shove
+		BEQ	BP_DOWN
+		CALL	HEAD_CHK		; up, if there is headroom
+		BEQ	BP_RET
+		MOVB	E.YOFF(R0),R1
+		BIC	#177400,R1
+		SUB	#2,R1
+		BHIS	1$
+		MOV	#6,R1
+		DECB	E.ROW(R0)
+		CMPB	E.ROW(R0),#2
+		BHIS	1$
+		MOVB	#2,E.ROW(R0)
+		CLR	R1
+1$:		MOVB	R1,E.YOFF(R0)
+		RETURN
+BP_DOWN:	MOVB	E.YOFF(R0),R1
+		BIC	#177400,R1
+		ADD	#2,R1
+		CMP	R1,#10
+		BLO	2$
+		CLR	R1
+		INCB	E.ROW(R0)
+2$:		MOVB	R1,E.YOFF(R0)
+BP_RET:		RETURN
+
+; ------------------------------------------------------------------
+; patrolling flame (ZX DDA8): R3 = 6-byte record
+; {row, pos, start, end, dir, phase}; tiles 6/7 alternate and the
+; flame hops along its row.
+PLANT_STEP:	MOV	R0,-(SP)
+		BITB	#1,4(R3)
+		BNE	PS_BACK
+		MOVB	5(R3),R1
+		BIC	#177400,R1
+		CMP	R1,#6
+		BNE	1$
+		MOV	#7,R1			; flicker to the other frame
+		BR	PS_DRAW
+1$:		CALL	PS_RESTORE		; moving on
+		MOVB	1(R3),R1
+		BIC	#177400,R1
+		CMPB	R1,3(R3)
+		BHIS	2$
+		INCB	1(R3)
+		MOV	#6,R1
+		BR	PS_DRAW
+2$:		MOVB	2(R3),R1		; wrap to the start
+		MOVB	R1,1(R3)
+		MOV	#6,R1
+		BR	PS_DRAW
+
+PS_BACK:	MOVB	5(R3),R1
+		BIC	#177400,R1
+		CMP	R1,#7
+		BNE	1$
+		MOV	#6,R1
+		BR	PS_DRAW
+1$:		CALL	PS_RESTORE
+		MOVB	1(R3),R1
+		BIC	#177400,R1
+		CMPB	R1,3(R3)
+		BLOS	2$
+		DECB	1(R3)
+		MOV	#7,R1
+		BR	PS_DRAW
+2$:		MOVB	2(R3),R1
+		MOVB	R1,1(R3)
+		MOV	#7,R1
+		BR	PS_DRAW
+
+PS_DRAW:	MOVB	R1,5(R3)
+		MOV	R1,-(SP)
+		CALL	PS_CELL
+		MOV	(SP)+,R1
+		CALL	PUT_TILE
+		MOV	(SP)+,R0
+		RETURN
+
+PS_RESTORE:	MOV	R3,-(SP)
+		CALL	PS_CELL
+		CALL	RESTORE_TILE
+		MOV	(SP)+,R3
+		RETURN
+
+PS_CELL:	MOVB	(R3),R0			; row
+		BIC	#177400,R0
+		ASH	#5,R0
+		MOVB	1(R3),R1		; pos (column)
+		BIC	#177400,R1
+		ADD	R1,R0
+		RETURN
+
+; flame records (from the ZX data; P_CH6..P_CH8 retarget them)
+PLANT1:		.BYTE	24,5,5,34,0,6		; ZX DAF9
+PLANT2:		.BYTE	26,4,3,25,0,6		; ZX DBA4
+PLANT3:		.BYTE	26,4,25,3,1,6		; ZX DBAA
+PLANT4:		.BYTE	12,5,4,27,0,6		; ZX DD07
+FLAMES15:	.BYTE	7,5,5,32,0,6		; ZX DCBE..
+		.BYTE	7,17,5,32,0,7
+		.BYTE	14,5,5,17,0,6
+		.BYTE	14,32,32,20,1,7
+		.BYTE	21,17,17,5,1,7
+		.BYTE	21,20,20,32,0,6
+		.BYTE	26,32,32,1,1,7
+		.BYTE	26,16,32,1,1,7
+		.EVEN
+
+; ------------------------------------------------------------------
+; header-driven tile animations (ZX DF7A/DF9D): 3 slots
+TILE_ANIMS:	MOV	R0,-(SP)
+		MOV	#HDR+H.ANIM,R3
+		MOV	#ANIMR1,R2
+		CALL	TA_ONE
+		MOV	#HDR+H.ANIM+4,R3
+		MOV	#ANIMR2,R2
+		CALL	TA_ONE
+		MOV	#HDR+H.ANIM+10,R3
+		MOV	#ANIMR3,R2
+		CALL	TA_ONE
+		MOV	(SP)+,R0
+		RETURN
+
+; R3 = spec {row, start, end, delay}, R2 = record {delay, sub,, phase, state}
+TA_ONE:		TSTB	(R3)
+		BNE	1$
+		RETURN
+1$:		TSTB	(R2)
+		BEQ	2$
+		DECB	(R2)
+		RETURN
+2$:		MOVB	1(R2),R1		; ISR-driven subcounter
+		BIC	#177400,R1
+		CMP	R1,#4
+		BHIS	3$
+		RETURN
+3$:		CLRB	1(R2)
+		MOVB	4(R2),R1		; state
+		BIC	#177400,R1
+		BNE	4$
+		MOVB	1(R3),3(R2)		; start the walk
+		MOV	#4,R1
+		BR	TA_DRAW
+4$:		CMP	R1,#4
+		BNE	5$
+		MOV	#5,R1
+		BR	TA_DRAW
+5$:		CALL	TA_RESTORE		; advance
+		INCB	3(R2)
+		MOVB	3(R2),R1
+		BIC	#177400,R1
+		CMPB	2(R3),R1
+		BLO	6$
+		MOV	#4,R1
+		BR	TA_DRAW
+6$:		MOVB	3(R3),(R2)		; pause, then again
+		CLRB	4(R2)
+		RETURN
+
+TA_DRAW:	MOVB	R1,4(R2)
+		MOV	R1,-(SP)
+		CALL	TA_CELL
+		MOV	(SP)+,R1
+		MOV	R2,-(SP)
+		MOV	R3,-(SP)
+		CALL	PUT_TILE
+		MOV	(SP)+,R3
+		MOV	(SP)+,R2
+		RETURN
+
+TA_RESTORE:	MOV	R2,-(SP)
+		MOV	R3,-(SP)
+		CALL	TA_CELL
+		CALL	RESTORE_TILE
+		MOV	(SP)+,R3
+		MOV	(SP)+,R2
+		RETURN
+
+TA_CELL:	MOVB	(R3),R0			; row
+		BIC	#177400,R0
+		ASH	#5,R0
+		MOVB	3(R2),R1		; phase = column
+		BIC	#177400,R1
+		ADD	R1,R0
+		RETURN

@@ -1,0 +1,242 @@
+; ------------------------------------------------------------------
+; Map scanning / collision helpers (ports of ZX D332..D5BA).
+; Convention: R0 = entity record; results in the Z flag with the
+; same sense as the original (documented per routine); R0 preserved.
+; Tile classes: >=100 solid, 30..37 climbable (count as floor),
+; 40..77 scenery, 27 exit, 20..26 collectible, 1..17 deadly on
+; pixel overlap, 0 background.  (octal)
+; ------------------------------------------------------------------
+
+; R3 = MAPB + row*32 + col of entity R0 (clobbers R1)
+MAP_ADDR:	MOVB	E.ROW(R0),R3
+		BIC	#177400,R3
+		ASL	R3
+		ASL	R3
+		ASL	R3
+		ASL	R3
+		ASL	R3
+		MOVB	E.COL(R0),R1
+		BIC	#177400,R1
+		ADD	R1,R3
+		ADD	#MAPB,R3
+		RETURN
+
+; frame dims of entity R0's current state:
+; DIMSW/DIMSH bytes, DIMSPTR -> cell codes (clobbers R1)
+GET_DIMS:	MOVB	E.STATE(R0),R1
+		BIC	#177400,R1
+		BNE	1$
+		MOV	#1,R1			; hidden: pretend 1x1
+1$:		MOV	R3,-(SP)
+		CALL	FRAME_OF
+		MOVB	(R3)+,DIMSW
+		MOVB	(R3)+,DIMSH
+		MOV	R3,DIMSPTR
+		MOV	(SP)+,R3
+		RETURN
+
+DIMSW:		.WORD	0
+DIMSH:		.WORD	0
+
+; Z = there is floor under the entity (ZX D332): scan DIMSW cells in
+; the row below the feet; solid or climbable = floor
+FLOOR_CHK:	CALL	MAP_ADDR
+		CALL	GET_DIMS
+		MOV	DIMSH,R1
+		BIC	#177400,R1
+1$:		ADD	#40,R3			; down DIMSH rows
+		SOB	R1,1$
+		MOV	DIMSW,R2
+		BIC	#177400,R2
+2$:		MOVB	(R3)+,R1
+		BIC	#177400,R1
+		CMP	R1,#100
+		BHIS	3$			; solid = floor
+		CMP	R1,#40
+		BHIS	4$			; scenery: not floor
+		CMP	R1,#30
+		BHIS	3$			; climbable = floor
+4$:		SOB	R2,2$
+		CLZ				; no floor anywhere
+		RETURN
+3$:		SEZ
+		RETURN
+
+; Z = blocked above (ZX D353): row < 3, or a solid tile in the row
+; above the head
+HEAD_CHK:	MOVB	E.ROW(R0),R1
+		BIC	#177400,R1
+		CMP	R1,#3
+		BLO	3$
+		CALL	MAP_ADDR
+		CALL	GET_DIMS
+		SUB	#40,R3			; one row up
+		MOV	DIMSW,R2
+1$:		MOVB	(R3)+,R1
+		BIC	#177400,R1
+		CMP	R1,#100
+		BHIS	3$
+		SOB	R2,1$
+		CLZ
+		RETURN
+3$:		SEZ
+		RETURN
+
+; Z = on a ladder (ZX D405): a body row with two climbable cells, or
+; a row ending with count = width-1
+CLIMB_CHK:	CALL	MAP_ADDR
+		CALL	GET_DIMS
+		MOV	DIMSH,R5
+		BIC	#177400,R5
+		MOV	DIMSW,R4
+		DEC	R4			; comparison count
+		MOVB	E.YOFF(R0),R1
+		BIC	#177400,R1
+		BEQ	1$
+		INC	R5			; straddles an extra row
+1$:		CLR	R2			; climbable count this row
+		MOV	DIMSW,R1
+		MOV	R1,-(SP)
+2$:		MOVB	(R3)+,R1
+		BIC	#177400,R1
+		CMP	R1,#40
+		BHIS	3$
+		CMP	R1,#30
+		BLO	3$
+		INC	R2
+		CMP	R2,#2
+		BEQ	8$			; two in a row: climbing
+3$:		DEC	@SP
+		BNE	2$
+		TST	(SP)+
+		CMP	R2,R4			; = width-1 also counts
+		BEQ	9$
+		MOV	#40,R1			; next row
+		SUB	DIMSW,R1
+		ADD	R1,R3
+		SOB	R5,1$
+		CLZ
+		RETURN
+8$:		TST	(SP)+
+9$:		SEZ
+		RETURN
+
+; Z = blocked moving left (ZX D45C): at column 0 enemies are blocked,
+; Bruce is not (he exits); otherwise solid anywhere in column col-1
+LEFT_BLK:	MOVB	E.COL(R0),R1
+		BIC	#177400,R1
+		BNE	1$
+		CMP	R0,#BRUCE		; at the edge: enemies stop
+		BNE	SBLK_Y
+		CLZ
+		RETURN
+1$:		CALL	MAP_ADDR
+		CALL	GET_DIMS
+		DEC	R3			; column to the left
+SIDE_SCAN:	MOV	DIMSH,R2
+		BIC	#177400,R2
+		MOVB	E.YOFF(R0),R1
+		BIC	#177400,R1
+		BEQ	2$
+		INC	R2
+2$:		MOVB	(R3),R1
+		BIC	#177400,R1
+		CMP	R1,#100
+		BHIS	SBLK_Y
+		ADD	#40,R3
+		SOB	R2,2$
+		CLZ
+		RETURN
+SBLK_Y:		SEZ
+		RETURN
+
+; Z = blocked moving right (ZX D48F)
+RIGHT_BLK:	CALL	GET_DIMS
+		MOVB	E.COL(R0),R1
+		BIC	#177400,R1
+		ADD	DIMSW,R1
+		CMP	R1,#40
+		BLO	1$
+		CMP	R0,#BRUCE		; at the edge
+		BNE	8$
+		CLZ
+		RETURN
+1$:		CALL	MAP_ADDR
+		ADD	DIMSW,R3		; column past the right side
+		BR	SIDE_SCAN
+8$:		SEZ
+		RETURN
+
+
+; Z = blocked or at the screen edge, left (ZX D43B) / right (D447):
+; for deciding to turn around
+LEFT_EDGE:	CALL	LEFT_BLK
+		BEQ	9$
+		MOVB	E.COL(R0),R1
+		BIC	#177400,R1
+		BEQ	8$
+		CMP	R1,#1
+		BEQ	8$
+		CLZ
+9$:		RETURN
+8$:		SEZ
+		RETURN
+
+RIGHT_EDGE:	CALL	RIGHT_BLK
+		BEQ	9$
+		CALL	GET_DIMS
+		MOVB	E.COL(R0),R1
+		BIC	#177400,R1
+		ADD	DIMSW,R1
+		CMP	R1,#40
+		BHIS	8$
+		CLZ
+9$:		RETURN
+8$:		SEZ
+		RETURN
+
+; facing-dependent block check (ZX D456): Z = can't move forward
+SIDE_BLK:	BITB	#1,E.FACE(R0)
+		BEQ	1$
+		BR	LEFT_BLK
+1$:		BR	RIGHT_BLK
+
+; facing-dependent edge check (used by the AI to turn around)
+SIDE_EDGE:	BITB	#1,E.FACE(R0)
+		BEQ	1$
+		BR	LEFT_EDGE
+1$:		BR	RIGHT_EDGE
+
+; ------------------------------------------------------------------
+; pixel-overlap test (ZX D587): does sprite cell R1 (of entity R0's
+; facing sheet) overlap tile R2's ink pixels?  Z = no overlap.
+PIX_OVERLAP:	ASL	R1
+		ASL	R1
+		ASL	R1
+		MOV	R1,R3
+		ADD	#SPR_CELLS,R3
+		BITB	#1,E.FACE(R0)
+		BEQ	1$
+		ADD	#SPR_CELLL-SPR_CELLS,R3
+1$:		ASL	R2			; tile: 8 words, low byte =
+		ASL	R2			; plane 1... use the OR of both
+		ASL	R2
+		ASL	R2
+		ADD	#TILE_GFX,R2
+		MOV	#8.,R4
+2$:		MOV	(R2)+,R5
+		MOV	R5,R1
+		SWAB	R1
+		BIS	R1,R5			; tile ink pixels (either plane)
+		BIC	#177400,R5
+		MOVB	(R3)+,R1
+		BIC	#177400,R1
+		BIT	R1,R5
+		BNE	8$			; overlap
+		SOB	R4,2$
+		SEZ
+		RETURN
+8$:		CLZ
+		RETURN
+
+; small helpers to set/clear Z without touching registers

@@ -1,0 +1,205 @@
+; ------------------------------------------------------------------
+; Game flow: new game init, chamber entry, transitions, life loss,
+; game over (ports of ZX C714/C73C, C790, C875, CA46, CAC0).
+; ------------------------------------------------------------------
+
+; one-time entity setup: state tables, rates, colors
+ENT_INIT:	MOV	#ST_NINJA,NINJA+E.STB
+		MOV	#ST_YAMO,YAMO+E.STB
+		MOV	#ST_BRUCE,BRUCE+E.STB
+		MOVB	#4,NINJA+E.RELOAD
+		MOVB	#5,YAMO+E.RELOAD
+		MOVB	#3,BRUCE+E.RELOAD
+		MOVB	#1,NINJA+E.TICK
+		MOVB	#1,YAMO+E.TICK
+		MOVB	#1,BRUCE+E.TICK
+		MOVB	#3,NINJA+E.COMBO	; white (as on the ZX)
+		MOVB	#2,YAMO+E.COMBO		; green
+		MOVB	#3,BRUCE+E.COMBO	; white
+		MOV	#NINJA,R0
+		CALL	ENT_CLEAR
+		MOV	#YAMO,R0
+		CALL	ENT_CLEAR
+		MOV	#BRUCE,R0
+		CALL	ENT_CLEAR
+		CLRB	NINJA+E.CMD
+		CLRB	YAMO+E.CMD
+		CLRB	BRUCE+E.CMD
+		RETURN
+
+; new game: reset scores, lives, lanterns, positions
+GAME_START:	CALL	ENT_INIT
+		MOV	#1,PLAYER
+		MOV	#SCORE1,R2	; both scores "000000"
+		MOV	#14.,R1
+1$:		MOVB	#60,(R2)+
+		SOB	R1,1$
+		MOVB	#60,HUDFALLS	; falls: "04" (or "09" for two)
+		MOVB	#64,HUDFALLS+1
+		TST	TWOPLAYER
+		BEQ	2$
+		MOVB	#71,HUDFALLS+1
+2$:		MOV	#5,WIZL		; wizard takes 5 hits
+		CLR	FRAMECNT
+		CLR	DEMO
+		MOVB	#4,BRUCE+E.COL
+		MOVB	#6,BRUCE+E.ROW
+		CLRB	BRUCE+E.FACE
+		MOVB	#1,BRUCE+E.STATE
+		MOV	#BRUCE,R3	; player 2 starts from the same state
+		MOV	#P2SWAP,R2
+		MOV	#E.SIZE/2,R1
+3$:		MOV	(R3)+,(R2)+
+		SOB	R1,3$
+		MOV	#CHCNT,R2	; clear both pickup-counter blocks
+		MOV	#40.,R1
+4$:		CLR	(R2)+
+		SOB	R1,4$
+
+; restore all lanterns/doors: set both player bits in every patch
+; guard, clear the visited flags (port of ZX C755..C788)
+		CLR	R5		; chamber index *2
+5$:		MOV	CHAMBER_TAB(R5),R4
+		CLR	14(R4)		; visited flags (+0x0C/0x0D)
+		MOV	6(R4),R3	; patch list
+6$:		MOVB	(R3),R1
+		CMPB	R1,#377
+		BEQ	8$
+		BIT	#200,R1
+		BEQ	7$
+		BISB	#3,(R3)+	; guard: both players again
+		BR	6$
+7$:		ADD	#3,R3		; skip a set entry
+		BR	6$
+8$:		ADD	#2,R5
+		CMP	R5,#50		; 20 chambers
+		BLO	5$
+
+		CLR	NEXTCH		; both players start at chamber 0
+		RETURN
+
+; the wizard is beaten: start over, harder, keeping the score
+VICTORY_RESTART:
+		MOV	#5,WIZL
+		CLR	FRAMECNT
+		MOVB	#4,BRUCE+E.COL
+		MOVB	#6,BRUCE+E.ROW
+		CLRB	BRUCE+E.FACE
+		CLRB	BRUCE+E.YOFF
+		MOVB	#1,BRUCE+E.STATE
+		CLR	NEXTCH
+		JMP	CH_ENTER
+
+; enter the current player's chamber (port of C790)
+CH_ENTER:	MOV	#NEXTCH,R2
+		CMP	PLAYER,#1
+		BEQ	1$
+		INC	R2
+1$:		MOVB	(R2),R1
+		BIC	#177400,R1
+		MOV	R1,CHAMBER
+		CALL	CH_LOAD
+		CLR	EXITFLAG
+		RETURN
+
+; ------------------------------------------------------------------
+; Bruce left the chamber (port of C875): pick the exit slot from the
+; column/row thresholds, follow the exit table.
+CH_TRANSIT:	CLR	R2		; exit index
+		MOVB	BRUCE+E.COL,R1
+		BIC	#177400,R1
+		INC	R1
+		CMPB	HDR+H.COLT,R1
+		BHIS	1$
+		INC	R2
+		CMPB	HDR+H.COLT+1,R1
+		BHIS	1$
+		INC	R2
+1$:		MOVB	BRUCE+E.ROW,R1
+		BIC	#177400,R1
+		CMPB	HDR+H.ROWT,R1
+		BHIS	2$
+		ADD	#3,R2
+		CMPB	HDR+H.ROWT+1,R1
+		BHIS	2$
+		ADD	#3,R2
+2$:		MOV	R2,R1		; entry = HDR+H.EXITS + E*3
+		ASL	R1
+		ADD	R2,R1
+		ADD	#HDR+H.EXITS,R1
+		MOVB	(R1)+,R0	; new chamber
+		CMPB	R0,#377
+		BEQ	LIFE_LOST	; fell off the map
+		MOV	#NEXTCH,R2
+		CMP	PLAYER,#1
+		BEQ	3$
+		INC	R2
+3$:		MOVB	R0,(R2)
+		MOVB	(R1)+,BRUCE+E.COL
+		MOVB	(R1),BRUCE+E.ROW
+		CALL	HUD_DRAW
+		JMP	CH_ENTER
+
+; ------------------------------------------------------------------
+; Bruce died (port of CA46): one fall less, respawn or game over
+LIFE_LOST:	CALL	LIFE_DEC
+		BEQ	GAME_OVER
+		MOV	#25.,R0		; half a second pause
+1$:		CALL	VSYNC
+		SOB	R0,1$
+		MOV	#HDR+H.SPAWNA,R2 ; respawn point: lower half ->
+		MOVB	BRUCE+E.ROW,R1	 ; spawn A, upper half -> spawn B
+		CMPB	R1,#22
+		BHIS	2$
+		MOV	#HDR+H.SPAWNB,R2
+2$:		MOVB	(R2)+,BRUCE+E.COL
+		MOVB	(R2)+,BRUCE+E.ROW
+		MOVB	(R2),R1
+		BICB	#376,R1
+		MOVB	R1,BRUCE+E.FACE
+		CLRB	BRUCE+E.YOFF
+		CLRB	BRUCE+E.DEATH
+		MOVB	#1,BRUCE+E.STATE
+		TST	TWOPLAYER	; alternating players: swap in the
+		BEQ	4$		; other Bruce and counters
+		MOV	PLAYER,R1
+		INC	R1
+		CMP	R1,#2
+		BLOS	3$
+		MOV	#1,R1
+3$:		MOV	R1,PLAYER
+		CALL	SWAP_PLAYERS
+4$:		JMP	CH_ENTER
+
+; swap Bruce's record and the pickup counters with the stored set
+SWAP_PLAYERS:	MOV	#BRUCE,R3
+		MOV	#P2SWAP,R2
+		MOV	#E.SIZE/2,R1
+1$:		MOV	(R3),R0
+		MOV	(R2),(R3)+
+		MOV	R0,(R2)+
+		SOB	R1,1$
+		MOV	#CHCNT,R3
+		MOV	#CHCNT2,R2
+		MOV	#20.,R1
+2$:		MOV	(R3),R0
+		MOV	(R2),(R3)+
+		MOV	R0,(R2)+
+		SOB	R1,2$
+		RETURN
+
+; ------------------------------------------------------------------
+GAME_OVER:	MOV	#12.*40+10,R0	; centre of the screen
+		MOV	#S_GAMEOVER,R3
+		CALL	PRINT_STR
+		CALL	BLIT_FULL
+		MOV	#100,R0		; leave it up ~1.3 s minimum
+1$:		CALL	VSYNC
+		SOB	R0,1$
+2$:		CALL	GET_KEY
+		TST	R0
+		BEQ	2$
+		MOV	#1,GAME_ABORT
+		RETURN
+
+GAME_ABORT:	.WORD	0		; nonzero: leave the game loop

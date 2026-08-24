@@ -1,0 +1,128 @@
+; ------------------------------------------------------------------
+; Chamber loader (port of ZX C16E): copy header, unpack the RLE map,
+; keep a pristine copy, apply the patch list, reset entities, draw
+; everything and schedule a full blit.
+; ------------------------------------------------------------------
+
+CH_LOAD:	MOV	CHAMBER,R0
+		ASL	R0
+		MOV	CHAMBER_TAB(R0),R3	; chamber blob
+		MOV	#HDR,R2
+		MOV	#40,R1			; 32 words of header
+1$:		MOV	(R3)+,(R2)+
+		SOB	R1,1$
+
+		MOV	#HDR+H.VISIT,R2		; mark visited for this player
+		MOV	PLAYER,R1
+		DEC	R1
+		BEQ	2$
+		INC	R2
+2$:		MOVB	(R2),CHVISITED		; previous value (bonus check)
+		MOVB	#1,(R2)
+
+		MOV	#MAP,R2			; unpack the RLE map
+3$:		MOVB	(R3)+,R1
+		BIC	#177400,R1
+		BEQ	6$			; 0 = end
+		BIT	#200,R1
+		BNE	5$
+		MOVB	(R3)+,R0		; repeat next byte R1 times
+4$:		MOVB	R0,(R2)+
+		SOB	R1,4$
+		BR	3$
+5$:		BIC	#200,R1			; copy R1 literal bytes
+55$:		MOVB	(R3)+,(R2)+
+		SOB	R1,55$
+		BR	3$
+
+6$:		MOV	#HDR,R3			; pristine copy (header + map)
+		MOV	#PRIS,R2
+		MOV	#600,R1			; 384. words
+7$:		MOV	(R3)+,(R2)+
+		SOB	R1,7$
+
+; apply the patch list: guard bytes (bit 7, & player mask) gate the
+; following 3-byte {col, row, value} entries; 0xFF ends the list
+		MOV	HDR+H.PATCH,R3
+		MOV	#1,R4			; take entries (no guard yet)
+PATCH_NEXT:	MOVB	(R3)+,R1
+		BIC	#177400,R1
+		CMP	R1,#377
+		BEQ	PATCH_DONE
+		BIT	#200,R1
+		BEQ	PATCH_SET
+		CLR	R4			; guard: entries apply only when
+		BIT	PLAYER,R1		; the player's bit is still set
+		BEQ	PATCH_NEXT
+		INC	R4
+		BR	PATCH_NEXT
+PATCH_SET:	TST	R4			; entry: R1 = col byte
+		BEQ	2$
+		MOVB	(R3),R0			; row byte
+		BIC	#177400,R0
+		ASL	R0			; row*32
+		ASL	R0
+		ASL	R0
+		ASL	R0
+		ASL	R0
+		BIC	#177740,R1		; col & 1F
+		ADD	R1,R0
+		BIC	#176000,R0		; & 3FF
+		MOVB	1(R3),MAPB(R0)		; value -> header/map
+2$:		ADD	#2,R3			; skip row + value
+		BR	PATCH_NEXT
+PATCH_DONE:
+
+; reset entities
+		CLR	FRAMECNT
+		MOV	#NINJA,R0
+		CALL	ENT_CLEAR
+		MOV	#YAMO,R0
+		CALL	ENT_CLEAR
+		MOV	#BRUCE,R0
+		CLRB	E.YOFF(R0)
+		CLRB	E.DEATH(R0)
+		CLRB	E.DMG(R0)
+		CLRB	E.HITSTR(R0)
+		MOVB	#1,E.STATE(R0)		; standing
+
+		MOV	#12,R1			; enemy activation delay
+		TST	HARDMODE
+		BNE	8$
+		MOV	#50,R1
+8$:		MOVB	R1,NINJA+E.RESPAWN
+		MOVB	R1,YAMO+E.RESPAWN
+
+		MOV	#DOORSL,R2		; clear door slots + anim recs
+		MOV	#41,R1			; 33. bytes: DOORSL+ANIMR1..3
+9$:		CLRB	(R2)+
+		SOB	R1,9$
+
+		MOV	#20,BOLTT		; wizard bolt oscillator
+		MOVB	#110,BOLTP
+
+; first-visit bonus (not for chambers 0 and 19)
+		MOV	CHAMBER,R1
+		BEQ	11$
+		CMP	R1,#23
+		BEQ	11$
+		TSTB	CHVISITED
+		BNE	11$
+		MOV	#S_B2000,R3
+		CALL	SCORE_ADD
+11$:
+		CALL	DRAW_MAP
+		CALL	HUD_DRAW
+		MOV	#1,REDRAW
+		RETURN
+
+ENT_CLEAR:	CLRB	E.STATE(R0)
+		CLRB	E.YOFF(R0)
+		CLRB	E.DEATH(R0)
+		CLRB	E.DMG(R0)
+		CLRB	E.HITSTR(R0)
+		MOVB	#2,E.CCOL(R0)
+		MOVB	#2,E.CROW(R0)
+		RETURN
+
+CHVISITED:	.WORD	0

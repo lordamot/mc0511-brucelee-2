@@ -1,0 +1,52 @@
+; ------------------------------------------------------------------
+; Startup: install the vsync ISR, load the PPU program, run the
+; menu / game cycle.
+; ------------------------------------------------------------------
+		.BLKB	2000-.
+
+MAIN_START:	MOV	#STACK_TOP,SP
+		CALL	TITLE_LOAD	; title data first: the firmware
+					; FDD service breaks once we
+					; touch the CPU vectors below
+		MOV	#INTERR_MAIN,@#100
+		MOV	#TRAP_RTI,@#4	; stray traps: ignore
+		MOV	#TRAP_RTI,@#10
+		CLR	KEYS_DATA
+		CLR	CPU_VSYNC
+		CLR	SND_REQ
+		CLR	SND_MODE
+		CLR	VBLF
+		MOV	#1,SOUND_ON
+		MOV	#HUDTOP,R2	; top score = 000000
+		MOV	#6,R1
+1$:		MOVB	#60,(R2)+
+		SOB	R1,1$
+		CALL	PP_MAIN_LOAD	; PPU: line table, colors, sound
+		CALL	TITLE_SHOW	; the loading picture, once
+
+MAIN_CYCLE:	CALL	MENU		; returns with options set
+		CALL	GAME_RUN
+		BR	MAIN_CYCLE
+
+TRAP_RTI:	RTI
+
+; 50 Hz vsync ISR: frame bits, counters, input scan
+INTERR_MAIN:	MOV	R0,-(SP)
+		MOV	R1,-(SP)
+		MOV	R2,-(SP)
+		ASL	VBLF		; one more frame pending
+		INC	VBLF
+		BIC	#177770,VBLF	; at most 3 pending frames: a long
+					; stall (disk load) must not shift
+					; the bits into the sign (ASR in
+					; VSYNC would then never consume)
+		INC	FRAMECNT
+		INCB	TICK99
+		INCB	ANIMR1+1	; tile-animation subcounters
+		INCB	ANIMR2+1
+		INCB	ANIMR3+1
+		CALL	INPUT_SCAN
+		MOV	(SP)+,R2
+		MOV	(SP)+,R1
+		MOV	(SP)+,R0
+		RTI

@@ -1,0 +1,242 @@
+# Entity animation frames (info blocks) and state tables.
+# frame NAME w= h= : cell codes (see cells.txt), row-major.
+# state NN frame=NAME handler=H_XXX
+
+frame f_cb8d w=2 h=3
+ c0 c1
+ e0 e1
+ c2 e2
+
+frame f_cb95 w=2 h=3
+ c6 c7
+ e6 e7
+ c8 e8
+
+frame f_cb9d w=2 h=3
+ c3 c4
+ e3 e4
+ c5 e5
+
+frame f_cba5 w=2 h=2
+ cc cd
+ ec ed
+
+frame f_cbab w=3 h=2
+ ce cf d0
+ ee ef f0
+
+frame f_cbb3 w=3 h=3
+ d1 d2 d3
+ f1 f2 f3
+ f4 f5 f6
+
+frame f_cc2c w=2 h=3
+ 60 61
+ 80 81
+ a0 a1
+
+frame f_cc34 w=2 h=3
+ 62 63
+ 82 83
+ a2 a3
+
+frame f_cc3c w=2 h=3
+ 64 65
+ 84 85
+ a4 a5
+
+frame f_cc44 w=3 h=2
+ 86 87 88
+ a6 a7 a8
+
+frame f_cc4c w=3 h=2
+ 89 8a 8b
+ a9 aa ab
+
+frame f_cc54 w=3 h=2
+ 8c 8d 8e
+ ac ad ae
+
+frame f_cc5c w=3 h=2
+ 8f 90 91
+ af b0 b1
+
+frame f_cc64 w=2 h=3
+ 72 73
+ 92 93
+ b2 b3
+
+frame f_cc6c w=3 h=3
+ 74 75 76
+ 94 95 96
+ b4 b5 b6
+
+frame f_cc77 w=3 h=3
+ 77 78 79
+ 97 98 99
+ b7 b8 b9
+
+frame f_cc82 w=2 h=3
+ da db
+ dc dd
+ de df
+
+frame f_cc8a w=2 h=3
+ 7c 7d
+ 9c 9d
+ bc bd
+
+frame f_cc92 w=2 h=3
+ 7e 7f
+ 9e 9f
+ be bf
+
+frame f_cc9a w=3 h=3
+ 69 6a 6b
+ 6c 6d 6e
+ 6f 70 71
+
+frame f_cd13 w=2 h=3
+ 00 01
+ 20 21
+ 40 41
+
+frame f_cd1b w=2 h=3
+ 02 03
+ 22 23
+ 42 43
+
+frame f_cd23 w=2 h=3
+ 04 05
+ 24 25
+ 44 45
+
+frame f_cd2b w=3 h=2
+ 26 27 28
+ 46 47 48
+
+frame f_cd33 w=3 h=2
+ 29 2a 2b
+ 49 4a 4b
+
+frame f_cd3b w=3 h=2
+ 2c 2d 2e
+ 4c 4d 4e
+
+frame f_cd43 w=3 h=2
+ 2f 30 31
+ 4f 50 51
+
+frame f_cd4b w=3 h=1
+ 06 07 08
+
+frame f_cd50 w=2 h=3
+ 12 13
+ 32 33
+ 52 53
+
+frame f_cd58 w=3 h=3
+ 14 15 16
+ 34 35 36
+ 54 55 56
+
+frame f_cd63 w=3 h=3
+ 17 18 19
+ 37 38 39
+ 57 58 59
+
+frame f_cd6e w=2 h=3
+ 1a 1b
+ 3a 3b
+ 5a 5b
+
+frame f_cd76 w=2 h=3
+ 1c 1d
+ 3c 3d
+ 5c 5d
+
+frame f_cd7e w=2 h=3
+ 1e 1f
+ 3e 3f
+ 5e 5f
+
+frame f_cd86 w=3 h=3
+ 09 0a 0b
+ 0c 0d 0e
+ 0f 10 11
+
+frame f_cd91 w=2 h=3
+ 7a 7b
+ 9a 9b
+ ba bb
+
+entity ninja tick=4 color=7
+ state 01 frame=f_cb8d handler=H_STAND
+ state 02 frame=f_cb95 handler=H_WALK
+ state 03 frame=f_cb9d handler=H_STEP
+ state 04 frame=f_cb8d handler=H_STAND
+ state 05 frame=f_cb8d handler=H_STAND
+ state 06 frame=f_cba5 handler=H_DUCK
+ state 07 frame=f_cbab handler=H_DUCKWALK
+ state 08 frame=f_cb8d handler=H_STAND
+ state 09 frame=f_cb95 handler=H_JUMPUP
+ state 0a frame=f_cb9d handler=H_JUMPFWD
+ state 0b frame=f_cbb3 handler=H_JUMPFWD2
+ state 0c frame=f_cb8d handler=H_STAND
+ state 0d frame=f_cb8d handler=H_STAND
+ state 0e frame=f_cb8d handler=H_STAND
+ state 0f frame=f_cb8d handler=H_STAND
+ state 10 frame=f_cb8d handler=H_STAND
+ state 11 frame=f_cb8d handler=H_FALLING
+ state 12 frame=f_cb8d handler=H_STAND
+ state 13 frame=f_cb8d handler=H_STAGGER
+ state 14 frame=f_cb8d handler=H_STAGGER2
+ state 15 frame=f_cba5 handler=H_THROWN
+
+entity yamo tick=5 color=7
+ state 01 frame=f_cc2c handler=H_STAND
+ state 02 frame=f_cc34 handler=H_WALK
+ state 03 frame=f_cc3c handler=H_STEP
+ state 04 frame=f_cc44 handler=H_PUNCH
+ state 05 frame=f_cc4c handler=H_PUNCH2
+ state 06 frame=f_cc54 handler=H_DUCK
+ state 07 frame=f_cc5c handler=H_DUCKWALK
+ state 08 frame=f_cc2c handler=H_STAND
+ state 09 frame=f_cc64 handler=H_JUMPUP
+ state 0a frame=f_cc6c handler=H_JUMPFWD
+ state 0b frame=f_cc77 handler=H_JUMPFWD2
+ state 0c frame=f_cc82 handler=H_KNOCKDOWN
+ state 0d frame=f_cc8a handler=H_FALL
+ state 0e frame=f_cc92 handler=H_CLIMB
+ state 0f frame=f_cc9a handler=H_CLIMB2
+ state 10 frame=f_cc2c handler=H_NOP
+ state 11 frame=f_cc8a handler=H_FALLING
+ state 12 frame=f_cc8a handler=H_KNOCKDOWN
+ state 13 frame=f_cc82 handler=H_STAGGER
+ state 14 frame=f_cc82 handler=H_STAGGER2
+ state 15 frame=f_cc54 handler=H_THROWN
+ state 16 frame=f_cc77 handler=H_KICK
+
+entity bruce tick=3 color=7
+ state 01 frame=f_cd13 handler=H_STAND
+ state 02 frame=f_cd1b handler=H_WALK
+ state 03 frame=f_cd23 handler=H_STEP
+ state 04 frame=f_cd2b handler=H_PUNCH
+ state 05 frame=f_cd33 handler=H_PUNCH2
+ state 06 frame=f_cd3b handler=H_DUCK
+ state 07 frame=f_cd43 handler=H_DUCKWALK
+ state 08 frame=f_cd4b handler=H_CLIMBUP
+ state 09 frame=f_cd50 handler=H_JUMPUP
+ state 0a frame=f_cd58 handler=H_JUMPFWD
+ state 0b frame=f_cd63 handler=H_JUMPFWD2
+ state 0c frame=f_cd6e handler=H_HANG
+ state 0d frame=f_cd76 handler=H_FALL
+ state 0e frame=f_cd7e handler=H_CLIMB
+ state 0f frame=f_cd86 handler=H_CLIMB2
+ state 10 frame=f_cd91 handler=H_NOP
+ state 11 frame=f_cd76 handler=H_FALLING
+ state 12 frame=f_cd76 handler=H_KNOCKDOWN
+ state 13 frame=f_cd91 handler=H_STAGGER
+ state 14 frame=f_cd91 handler=H_STAGGER2
+ state 15 frame=f_cd3b handler=H_THROWN
+ state 16 frame=f_cd63 handler=H_KICK

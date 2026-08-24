@@ -1,0 +1,3 @@
+		.BLKB	PROG_SIZE-.	; pad the image (build fails here
+PROG_END:				; when the program outgrows it)
+		.END

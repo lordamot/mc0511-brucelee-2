@@ -1,0 +1,40 @@
+# Game strings.  label|text ; ZX charset was ASCII 20..5F.
+
+gameover1|(C) 1984   BRUCE LEE
+gameover2|ALL RIGHTS RESERVED          LIC. BY ZIV INTERNATIONAL
+gameover3|BY RON J FORTIER
+gameover4|GAME, GRAPHICS (C) 1984 DATASOFT
+gameover5|CONVERSION BY L.T.SOFTWARE FOR
+gameover6|TM DESIGNATES A TRADEMARK             OF LINDA LEE
+timesup|* * * * *  GAME  OVER  * * * * *
+menu1|A    1 PLAYER    2 PLAYERS
+menu2|B    COMPUTER    OPPONENT
+menu3|C 1: KEYBOARD    PROTEK INTF         KEMPSTON    INTERFACE 2
+menu4|ENTER TO BEGIN GAME
+menu5|  SHIFT/BREAK::::::restart game   SYMBOL SHIFT:::::sound on/off   ENTER::pause  Z-M::punch/kick   Q:up  A:down  O:left  P:right 
+menu6|D 2
+pause| * PAUSING :    Press 'ENTER' * 
+hudtext|1UP 000000  TOP 000000  FALLS 03                                
+b50|000050
+b75|000075
+b100|000100
+b125|000125
+b200|000200
+b450|000450
+b2000|002000
+b3000|003000
+
+# --- UKNC port strings (native menu / HUD) ---
+title|* B R U C E   L E E *
+mplayers|PLAYERS:
+myamo|YAMO:
+mstart|PRESS ENTER TO START
+mcredit|UKNC MC-0511 PORT 2026
+m1|ONE
+m2|TWO
+mcomp|COMPUTER
+mhum|PLAYER 2
+hudmid|  TOP 
+hudfal|  FALLS 
+gameover|G A M E   O V E R
+victory|YOU HAVE BEATEN THE WIZARD

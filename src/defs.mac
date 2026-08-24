@@ -1,0 +1,53 @@
+		.ASECT
+; ------------------------------------------------------------------
+; Global layout constants (octal).  See .claude/docs/port-plan.md.
+; ------------------------------------------------------------------
+
+PROG_SIZE = 120000		; program image size (boot + code + data)
+
+; back buffer: 192 lines x 32 words (planes 1+2 packed), rows 0..23
+BUF	= 130000		; 130000..157777
+BUF_ROW = 64.			; bytes per buffer line
+BUF_CELL = 2			; bytes per cell column
+
+; visible screen (plane byte addresses for @#176640)
+VRAM	= 100000		; first visible line
+VLINE	= 80.			; plane bytes per line (320 mode shows 40)
+VX0	= 4			; game area left margin, bytes
+VY0	= 48.			; game area top margin, lines
+VCELL0	= VRAM + <VY0*VLINE> + VX0	; video address of cell (0,0)
+
+STACK_TOP = BUF			; stack grows down from the back buffer
+
+; entity record layout (mirrors the ZX record; see port-plan.md)
+E.TICK	= 0.		; frame countdown
+E.RELOAD = 1.		; countdown reload (state-machine rate)
+E.STATE	= 2.		; current state = animation frame (0 = hidden)
+E.FACE	= 3.		; bit 0: 0 = faces right, 1 = faces left
+E.YOFF	= 4.		; vertical pixel offset 0..7 inside the cell
+E.COMBO	= 5.		; plane combo: 1 warm, 2 cool, 3 white
+E.COL	= 6.		; cell column 0..31
+E.ROW	= 7.		; cell row 2..23
+E.CCOL	= 8.		; clamped copies for the screen blit
+E.CROW	= 9.
+E.DEATH	= 10.		; death counter (0 = alive)
+E.CMD	= 11.		; movement command (input or AI)
+E.C12	= 12.		; handler scratch counters
+E.C13	= 13.
+E.DMG	= 14.		; accumulated damage
+E.SAVED	= 15.		; saved state for the death animation
+E.RESPAWN = 16.		; enemy respawn countdown
+E.HITSTR = 17.		; strength of the last landed hit
+E.STB	= 18.		; word: state table (.WORD frame,handler per state)
+E.SIZE	= 20.
+
+; chamber header field offsets (ZX layout)
+H.PATCH	= 6		; word: patch list
+H.SPAWNA = 10		; col, row, flags (bit0 facing, bit7 no enemies)
+H.BORDER = 13
+H.VISIT	= 14		; per-player visited flags (+0 P1, +1 P2)
+H.COLT	= 16		; exit column thresholds
+H.ROWT	= 20		; exit row thresholds
+H.EXITS	= 22		; 9 x {chamber, col, row}
+H.SPAWNB = 55		; second spawn point (octal 55 = 0x2D)
+H.ANIM	= 60		; tile animation specs, 3-4 x 4 bytes

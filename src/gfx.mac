@@ -1,0 +1,353 @@
+; ------------------------------------------------------------------
+; Drawing primitives.  All game rendering goes through the back
+; buffer (BUF: 192 lines x 32 words, planes 1+2 packed low/high),
+; then regions are blitted to the screen through @#176640/176642.
+;
+; Coordinates follow the ZX original: cells (col 0..31, row 0..23),
+; map rows 2..23.  MAPB/PRISB are virtual bases so that
+; MAPB + row*32 + col addresses the live/pristine map cell.
+; ------------------------------------------------------------------
+
+; ------------------------------------------------------------------
+; R0 = cell offset (row*32+col) -> R2 = back buffer byte address of
+; the cell's top line.  Preserves R0, R1.
+BUFADDR:	MOV	R0,R2
+		BIC	#177740,R2	; col
+		ASL	R2		; *2
+		MOV	R0,-(SP)
+		BIC	#37,@SP		; row*32
+		ASL	@SP		; -> row*512
+		ASL	@SP
+		ASL	@SP
+		ASL	@SP
+		ADD	(SP)+,R2
+		ADD	#BUF,R2
+		RETURN
+
+; ------------------------------------------------------------------
+; draw tile R1 (code) at cell offset R0 into the back buffer
+TILE_TO_BUF:	CALL	BUFADDR
+		MOV	R1,R3
+		ASL	R3		; code*16
+		ASL	R3
+		ASL	R3
+		ASL	R3
+		ADD	#TILE_GFX,R3
+		MOV	(R3)+,(R2)	; 8 rows, stride 64
+		MOV	(R3)+,100(R2)
+		MOV	(R3)+,200(R2)
+		MOV	(R3)+,300(R2)
+		MOV	(R3)+,400(R2)
+		MOV	(R3)+,500(R2)
+		MOV	(R3)+,600(R2)
+		MOV	(R3)+,700(R2)
+		RETURN
+
+; redraw the whole map (rows 2..23) into the back buffer
+DRAW_MAP:	MOV	#100,R0		; cell offset of (0,2)
+1$:		MOVB	MAPB(R0),R1
+		BIC	#177400,R1
+		MOV	R0,-(SP)
+		CALL	TILE_TO_BUF
+		MOV	(SP)+,R0
+		INC	R0
+		CMP	R0,#1400	; 768.
+		BLO	1$
+		RETURN
+
+; ------------------------------------------------------------------
+; blit one row of R1 cells at cell offset R0 (8 lines each).
+; Clobbers R0..R5.
+BLIT_CELLS:	CALL	BUFADDR		; R2 = buffer address
+		CALL	VIDROW		; R3 = video address
+		MOV	#176640,R4
+		MOV	#176642,R5
+		MOV	#8.,R0		; 8 lines
+1$:		MOV	R1,-(SP)
+		MOV	R2,-(SP)
+		MOV	R3,@R4
+2$:		MOV	(R2)+,@R5
+		INC	@R4
+		SOB	R1,2$
+		MOV	(SP)+,R2
+		MOV	(SP)+,R1
+		ADD	#100,R2		; buffer: next line
+		ADD	#120,R3		; video: next line
+		SOB	R0,1$
+		RETURN
+
+; R0 = cell offset -> R3 = video address (VCELL0 + row*640 + col)
+VIDROW:		MOV	R0,R3
+		BIC	#177740,R3	; col
+		ADD	#VCELL0,R3
+		MOV	R0,-(SP)
+		BIC	#37,@SP		; row*32
+		MOV	@SP,R4
+		ASL	R4		; row*64
+		ASL	R4		; row*128
+		ADD	R4,@SP		; row*160
+		ASL	@SP		; row*320
+		ASL	@SP		; row*640
+		ADD	(SP)+,R3
+		RETURN
+
+; blit rectangle: R0 = cell offset, R1 = width, R2 = height (rows)
+BLIT_RECT:	MOV	R2,-(SP)
+1$:		MOV	R0,-(SP)
+		MOV	R1,-(SP)
+		CALL	BLIT_CELLS
+		MOV	(SP)+,R1
+		MOV	(SP)+,R0
+		ADD	#40,R0		; next cell row
+		DEC	@SP
+		BNE	1$
+		TST	(SP)+
+		RETURN
+
+; blit the whole game screen (24 cell rows)
+BLIT_FULL:	CLR	R0
+		MOV	#40,R1
+		MOV	#30,R2
+		CALL	BLIT_RECT
+		RETURN
+
+; ------------------------------------------------------------------
+; sprite cell composition into the back buffer:
+;   R0 = cell code, R2 = buffer byte address (any line)
+;   SPR_BASE / SPR_MBASE = facing sheet (glyphs / inverted masks)
+;   SPR_CMASK = BIC mask for the planes NOT in the entity's combo
+; 8 rows, stride 64.  Clobbers R0,R1,R3,R4,R5; R2 kept.
+SPR_CELL:	MOV	R0,R3
+		ASL	R3
+		ASL	R3
+		ASL	R3		; code*8
+		MOV	R3,R4
+		ADD	SPR_BASE,R3	; glyph bytes
+		ADD	SPR_MBASE,R4	; inverted mask bytes
+		MOV	R2,-(SP)
+		MOV	#8.,R5
+1$:		MOVB	(R4)+,R1	; inverted mask
+		BIC	#177400,R1
+		MOV	R1,R0
+		SWAB	R0
+		BIS	R0,R1		; both plane bytes
+		BIC	R1,(R2)		; clear sprite area
+		MOVB	(R3)+,R1	; glyph
+		BIC	#177400,R1
+		MOV	R1,R0
+		SWAB	R0
+		BIS	R0,R1
+		BIC	SPR_CMASK,R1	; keep only the combo planes
+		BIS	R1,(R2)
+		ADD	#100,R2
+		SOB	R5,1$
+		MOV	(SP)+,R2
+		RETURN
+
+SPR_BASE:	.WORD	SPR_CELLS
+SPR_MBASE:	.WORD	SPR_MASKI
+SPR_CMASK:	.WORD	0
+
+; entity combo (1 warm/2 cool/3 white) -> SPR_CMASK (planes to BIC off)
+COMBO_MASK:	BIC	#177774,R1
+		CLR	SPR_CMASK
+		CMP	R1,#3
+		BEQ	9$
+		MOV	#377,SPR_CMASK	; combo 1 = plane 2 only: clear low
+		CMP	R1,#1
+		BEQ	9$
+		MOV	#177400,SPR_CMASK ; combo 2 = plane 1 only: clear high
+9$:		RETURN
+
+; select the facing sheet: R1 = E.FACE
+FACE_SHEET:	MOV	#SPR_CELLS,SPR_BASE
+		MOV	#SPR_MASKI,SPR_MBASE
+		BIT	#1,R1
+		BEQ	9$
+		MOV	#SPR_CELLL,SPR_BASE
+		MOV	#SPR_MASKLI,SPR_MBASE
+9$:		RETURN
+
+; ------------------------------------------------------------------
+; frame info block of entity R0's state R1 -> R3 (.BYTE w,h,cells...)
+FRAME_OF:	MOV	R1,R3
+		DEC	R3
+		ASL	R3
+		ASL	R3
+		ADD	E.STB(R0),R3
+		MOV	(R3),R3
+		RETURN
+
+; ------------------------------------------------------------------
+; draw entity R0's sprite into the back buffer (port of ZX C3CB)
+ENT_DRAW:	MOVB	E.STATE(R0),R1
+		BIC	#177400,R1
+		BEQ	9$
+		CALL	FRAME_OF	; R3 = frame info
+		MOVB	E.FACE(R0),R1
+		CALL	FACE_SHEET
+		MOVB	E.COMBO(R0),R1
+		CALL	COMBO_MASK
+		MOVB	E.ROW(R0),R2	; buffer addr = (row*8+yoff)*64 + col*2
+		BIC	#177400,R2
+		ASL	R2
+		ASL	R2
+		ASL	R2
+		MOVB	E.YOFF(R0),R1
+		BIC	#177400,R1
+		ADD	R1,R2
+		ASL	R2		; *64
+		ASL	R2
+		ASL	R2
+		ASL	R2
+		ASL	R2
+		ASL	R2
+		ADD	#BUF,R2
+		MOVB	E.COL(R0),R1
+		BIC	#177400,R1
+		ASL	R1
+		ADD	R1,R2
+		MOVB	(R3)+,R4	; w
+		BIC	#177400,R4
+		MOVB	(R3)+,R5	; h
+		BIC	#177400,R5
+1$:		MOV	R4,-(SP)	; cells in this row
+		MOV	R2,-(SP)	; row start address
+2$:		MOVB	(R3)+,R0
+		BIC	#177400,R0
+		CMP	R2,#BUF+27600	; clip: 8 lines must stay in BUF
+		BHIS	3$
+		MOV	R3,-(SP)
+		MOV	R4,-(SP)
+		MOV	R5,-(SP)
+		CALL	SPR_CELL
+		MOV	(SP)+,R5
+		MOV	(SP)+,R4
+		MOV	(SP)+,R3
+3$:		ADD	#2,R2		; next cell column
+		SOB	R4,2$
+		MOV	(SP)+,R2
+		MOV	(SP)+,R4
+		ADD	#1000,R2	; next cell row (8*64)
+		SOB	R5,1$
+9$:		RETURN
+
+; ------------------------------------------------------------------
+; restore map tiles under entity R0 (port of ZX C366): w cells wide,
+; 5 cell rows clipped at the bottom, from (E.COL, E.ROW).
+ENT_RESTORE:	MOVB	E.STATE(R0),R1
+		BIC	#177400,R1
+		BEQ	9$
+		CALL	FRAME_OF
+		MOVB	(R3),R4		; w
+		BIC	#177400,R4
+		MOV	#5,R5		; 5 rows, clipped to the screen
+		MOVB	E.ROW(R0),R2
+		BIC	#177400,R2
+		MOV	#30.,R1
+		SUB	R2,R1		; 24 - row
+		CMP	R1,R5
+		BHIS	1$
+		MOV	R1,R5
+1$:		ASL	R2		; cell offset = row*32 + col
+		ASL	R2
+		ASL	R2
+		ASL	R2
+		ASL	R2
+		MOVB	E.COL(R0),R1
+		BIC	#177400,R1
+		ADD	R1,R2
+2$:		MOV	R4,-(SP)
+		MOV	R2,-(SP)
+3$:		MOV	R2,R0
+		MOVB	MAPB(R0),R1
+		BIC	#177400,R1
+		MOV	R2,-(SP)
+		MOV	R4,-(SP)
+		MOV	R5,-(SP)
+		CALL	TILE_TO_BUF
+		MOV	(SP)+,R5
+		MOV	(SP)+,R4
+		MOV	(SP)+,R2
+		INC	R2
+		SOB	R4,3$
+		MOV	(SP)+,R2
+		MOV	(SP)+,R4
+		ADD	#40,R2		; next cell row
+		SOB	R5,2$
+9$:		RETURN
+
+; ------------------------------------------------------------------
+; blit the entity's screen region (ZX C2EC/C2F7): 5 cells wide (or
+; less at the right edge), 4 cell rows, at clamped (E.CCOL, E.CROW)
+ENT_BLIT:	MOVB	E.CROW(R0),R2
+		BIC	#177400,R2
+		ASL	R2
+		ASL	R2
+		ASL	R2
+		ASL	R2
+		ASL	R2
+		MOVB	E.CCOL(R0),R1
+		BIC	#177400,R1
+		ADD	R1,R2
+		MOV	#5,R3		; width = min(5, 32-col)
+		MOV	#40,R4
+		SUB	R1,R4
+		CMP	R4,R3
+		BHIS	1$
+		MOV	R4,R3
+1$:		MOV	R2,R0
+		MOV	R3,R1
+		MOV	#4,R2
+		CALL	BLIT_RECT
+		RETURN
+
+; ------------------------------------------------------------------
+; PUT_TILE (ZX D60E): R1 = tile code, R0 = cell offset: update the
+; live map, the back buffer and the screen cell.  Preserves R0.
+; RESTORE_TILE (ZX D626): restore cell R0 from the pristine map.
+PUT_TILE:	MOVB	R1,MAPB(R0)
+		MOV	R0,-(SP)
+		CALL	TILE_TO_BUF
+		MOV	(SP),R0
+		MOV	#1,R1
+		CALL	BLIT_CELLS
+		MOV	(SP)+,R0
+		RETURN
+
+RESTORE_TILE:	MOVB	PRISB(R0),R1
+		BIC	#177400,R1
+		BR	PUT_TILE
+
+; ------------------------------------------------------------------
+; text: draw string R3 (font codes, 0-terminated) at cell offset R0,
+; white, into the back buffer.
+PRINT_STR:	MOVB	(R3)+,R1
+		BEQ	9$
+		BIC	#177400,R1
+		MOV	R0,-(SP)
+		MOV	R3,-(SP)
+		CALL	CHAR_TO_BUF
+		MOV	(SP)+,R3
+		MOV	(SP)+,R0
+		INC	R0
+		BR	PRINT_STR
+9$:		RETURN
+
+; R1 = char code (32..127), R0 = cell offset
+CHAR_TO_BUF:	CALL	BUFADDR
+		SUB	#40,R1
+		ASL	R1
+		ASL	R1
+		ASL	R1
+		ADD	#FONT8,R1
+		MOV	#8.,R5
+1$:		MOVB	(R1)+,R3
+		BIC	#177400,R3
+		MOV	R3,R4
+		SWAB	R4
+		BIS	R4,R3		; both planes = white
+		MOV	R3,(R2)
+		ADD	#100,R2
+		SOB	R5,1$
+		RETURN

@@ -1,0 +1,134 @@
+; ------------------------------------------------------------------
+; The main game loop (port of ZX C7AB).
+; ------------------------------------------------------------------
+
+GAME_RUN:	CLR	GAME_ABORT
+		CALL	GAME_START
+		CALL	CH_ENTER
+
+GAME_LOOP:	CALL	VSYNC
+		TST	GAME_ABORT
+		BEQ	1$
+		RETURN
+1$:		TST	REDRAW		; full screen or entity regions
+		BEQ	2$
+		CALL	BLIT_FULL
+		CLR	REDRAW
+		BR	3$
+2$:		MOV	#NINJA,R0
+		CALL	ENT_BLIT
+		MOV	#YAMO,R0
+		CALL	ENT_BLIT
+		MOV	#BRUCE,R0
+		CALL	ENT_BLIT
+3$:		MOV	#NINJA,R0	; restore map under the entities
+		CALL	ENT_RESTORE
+		MOV	#YAMO,R0
+		CALL	ENT_RESTORE
+		MOV	#BRUCE,R0
+		CALL	ENT_RESTORE
+
+		CALL	HAZ_FRAME	; per-chamber frame handler
+
+		MOV	FREEZE,R1	; state machines (unless frozen by
+		CLR	FREEZE		; a hazard this frame)
+		TST	R1
+		BNE	4$
+		MOV	#NINJA,R0
+		CALL	ENT_STEP
+		MOV	#YAMO,R0
+		CALL	ENT_STEP
+		MOV	#BRUCE,R0
+		CALL	ENT_STEP
+4$:
+		TST	VICTORYF	; beat the wizard: loop, harder
+		BEQ	44$
+		CLR	VICTORYF
+		CALL	VICTORY_RESTART
+		JMP	GAME_LOOP
+44$:		MOVB	BRUCE+E.DEATH,R1 ; Bruce's death counter ran out?
+		BIC	#177400,R1
+		CMP	R1,#144
+		BLO	5$
+		CALL	LIFE_LOST
+		JMP	GAME_LOOP
+5$:		MOV	#NINJA,R0	; enemies: fell off / died
+		CALL	ENT_FALLOFF
+		CALL	ENT_DEATH
+		MOV	#YAMO,R0
+		CALL	ENT_FALLOFF
+		CALL	ENT_DEATH
+
+		MOV	#BRUCE,R0	; Bruce leaving the chamber?
+		TST	EXITFLAG
+		BNE	7$
+		MOVB	BRUCE+E.ROW,R1	; through the top (row<3, high in
+		BIC	#177400,R1	; the cell)?
+		CMP	R1,#3
+		BHIS	51$
+		MOVB	BRUCE+E.YOFF,R2
+		BIC	#177400,R2
+		CMP	R2,#4
+		BLO	7$
+51$:		CALL	FRAME_HEIGHT	; through the bottom?
+		ADD	R2,R1
+		CMP	R1,#30
+		BHIS	7$
+		TSTB	BRUCE+E.FACE
+		BEQ	55$
+		CMPB	BRUCE+E.COL,#0	; walked off the left edge?
+		BLT	7$
+		BR	6$
+55$:		MOVB	BRUCE+E.COL,R1
+		BIC	#177400,R1
+		CALL	FRAME_WIDTH	; off the right edge?
+		ADD	R2,R1
+		CMP	R1,#41
+		BHIS	7$
+6$:		MOV	#NINJA,R0	; still inside: draw everything
+		CALL	ENT_DRAW
+		MOV	#YAMO,R0
+		CALL	ENT_DRAW
+		MOV	#BRUCE,R0
+		CALL	ENT_DRAW
+		CALL	SYS_KEYS
+		JMP	GAME_LOOP
+7$:		CALL	CH_TRANSIT
+		JMP	GAME_LOOP
+
+; width / height of Bruce's current frame -> R2 (R1 preserved)
+FRAME_WIDTH:	CLR	FRWH
+		BR	FRWH0
+FRAME_HEIGHT:	MOV	#1,FRWH
+FRWH0:		MOV	R1,-(SP)
+		MOV	#BRUCE,R0
+		MOVB	E.STATE(R0),R1
+		BIC	#177400,R1
+		BNE	1$
+		CLR	R2
+		BR	2$
+1$:		CALL	FRAME_OF
+		ADD	FRWH,R3
+		MOVB	(R3),R2
+		BIC	#177400,R2
+2$:		MOV	(SP)+,R1
+		RETURN
+FRWH:		.WORD	0
+
+; ------------------------------------------------------------------
+; system keys: AP2 or STOP pauses; in the pause FIKS resumes and
+; STOP aborts to the menu
+SYS_KEYS:	MOV	KEYS_DATA,R0
+		BIT	#100200,R0
+		BEQ	9$
+		BIT	#100000,R0	; STOP pressed outright: abort
+		BNE	8$
+1$:		CALL	VSYNC		; AP2: pause
+		MOV	KEYS_DATA,R0
+		BIT	#100000,R0
+		BNE	8$
+		BIT	#40,R0		; FIKS resumes
+		BEQ	1$
+		RETURN
+8$:		MOV	#1,GAME_ABORT
+9$:		RETURN

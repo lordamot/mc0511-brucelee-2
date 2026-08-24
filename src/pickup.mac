@@ -1,0 +1,477 @@
+; ------------------------------------------------------------------
+; Special tiles: collectibles, exits, deadly pixels (ZX D4EC..D5BA),
+; lantern bookkeeping in the patch lists (D5BB), the door-opening
+; slots (DA63/D9D7) and the per-chamber pickup handlers (D845..).
+; ------------------------------------------------------------------
+
+; scan entity R0's cells against the map (called every state tick)
+SPECIAL_SCAN:	CALL	MAP_ADDR
+		CALL	GET_DIMS
+		MOV	DIMSPTR,R4		; frame cell codes
+		MOV	DIMSH,R5
+SS_ROW:		MOV	DIMSW,R2
+		MOV	R2,-(SP)
+SS_CELL:	MOVB	(R3),R1
+		BIC	#177400,R1
+		CMP	R1,#27			; exit door tile
+		BNE	3$
+		CALL	EXIT_TOUCH
+		BR	SS_NEXT
+3$:		CMP	R1,#30
+		BHIS	SS_NEXT			; climbable and up: nothing
+		CMP	R1,#20
+		BHIS	PICKUP			; collectible
+		TST	R1
+		BEQ	SS_NEXT			; background
+		BR	DEADLY			; deadly scenery: check pixels
+SS_NEXT:	INC	R3
+		INC	R4
+		DEC	@SP
+		BEQ	1$
+		JMP	SS_CELL
+1$:		TST	(SP)+
+		MOV	#40,R1			; next map row
+		SUB	DIMSW,R1
+		ADD	R1,R3
+		DEC	R5
+		BEQ	2$
+		JMP	SS_ROW
+2$:		RETURN
+
+; deadly tile R1 at map ptr R3, sprite cell at (R4)
+DEADLY:		MOV	R1,R2			; tile code
+		MOVB	(R4),R1
+		BIC	#177400,R1
+		MOV	R3,-(SP)
+		MOV	R4,-(SP)
+		MOV	R5,-(SP)
+		CALL	PIX_OVERLAP
+		MOV	(SP)+,R5
+		MOV	(SP)+,R4
+		MOV	(SP)+,R3
+		BEQ	SS_NEXT			; no ink overlap
+		TSTB	E.DEATH(R0)
+		BNE	SS_NEXT
+		MOVB	E.STATE(R0),E.SAVED(R0)
+		MOVB	#1,E.DEATH(R0)
+		BR	SS_NEXT
+
+; collectible tile R1 at map ptr R3 (Bruce only, on pixel overlap)
+PICKUP:		CMP	R0,#BRUCE
+		BNE	SS_NEXT
+		MOV	R1,R2
+		MOVB	(R4),R1
+		BIC	#177400,R1
+		MOV	R3,-(SP)
+		MOV	R4,-(SP)
+		MOV	R5,-(SP)
+		CALL	PIX_OVERLAP
+		BEQ	8$
+		MOV	2(SP),R3		; map ptr -> cell offset
+		SUB	#MAPB,R3
+		MOV	R3,-(SP)
+		MOV	#S_B125,R3		; lantern: 125 points
+		CALL	SCORE_ADD
+		TST	SOUND_ON
+		BEQ	4$
+		MOV	#2,SND_REQ		; pickup chime
+4$:		MOV	(SP)+,R2		; cell offset -> col/row
+		MOV	R2,R4
+		BIC	#177740,R4		; col
+		MOV	R2,R5
+		ASH	#-5,R5			; row
+		BIC	#177700,R5
+		MOV	CHAMBER,R1
+		CALL	LANTERN_TAKE
+		MOV	CHAMBER,R1		; per-chamber pickup handler
+		ASL	R1
+		CALL	@P_TAB(R1)
+8$:		MOV	(SP)+,R5
+		MOV	(SP)+,R4
+		MOV	(SP)+,R3
+		BR	SS_NEXT
+
+; ------------------------------------------------------------------
+; clear the patch guard of the group containing cell (R4=col,R5=row)
+; in chamber R1's list for the current player; when that chamber is
+; on screen, restore the group's cells (the lantern disappears).
+; Clobbers R1,R2,R3.
+LANTERN_TAKE:	MOV	R4,-(SP)
+		MOV	R5,-(SP)
+		MOV	R1,-(SP)		; chamber
+		ASL	R1
+		MOV	CHAMBER_TAB(R1),R3
+		MOV	6(R3),R3		; patch list
+		CLR	R2			; last guard
+1$:		MOVB	(R3),R1
+		BIC	#177400,R1
+		CMP	R1,#377
+		BEQ	89$			; not found
+		BIT	#200,R1
+		BEQ	2$
+		MOV	R3,R2			; remember the guard
+		INC	R3
+		BR	1$
+2$:		CMPB	(R3),R4			; entry: col, row match?
+		BNE	3$
+		CMPB	1(R3),R5
+		BEQ	4$
+3$:		ADD	#3,R3
+		BR	1$
+4$:		TST	R2
+		BEQ	89$
+		MOVB	PLAYER,R1		; collected for this player:
+		BICB	R1,(R2)			; clear their bit in the guard
+		CMP	(SP),CHAMBER		; visible now?
+		BNE	89$
+6$:		INC	R2			; restore the group's cells
+		MOVB	(R2),R1
+		BIC	#177400,R1
+		CMP	R1,#377
+		BEQ	89$
+		BIT	#200,R1
+		BNE	89$
+		MOVB	1(R2),R3		; row
+		BIC	#177400,R3
+		ASL	R3
+		ASL	R3
+		ASL	R3
+		ASL	R3
+		ASL	R3
+		BIC	#177740,R1		; col
+		ADD	R1,R3
+		MOV	R3,R0
+		MOV	R2,-(SP)
+		CALL	RESTORE_TILE
+		MOV	(SP)+,R2
+		MOV	#BRUCE,R0
+		ADD	#2,R2			; next entry
+		BR	6$
+89$:		MOV	(SP)+,R1
+		MOV	(SP)+,R5
+		MOV	(SP)+,R4
+		MOV	#BRUCE,R0
+		RETURN
+
+; ------------------------------------------------------------------
+; exit-door tile touched (map ptr R3): per-chamber handler
+EXIT_TOUCH:	MOV	R1,-(SP)
+		MOV	R2,-(SP)
+		MOV	R3,-(SP)
+		MOV	R4,-(SP)
+		MOV	R5,-(SP)
+		SUB	#MAPB,R3		; cell offset
+		MOV	CHAMBER,R1
+		ASL	R1
+		MOV	R3,R2
+		CALL	@X_TAB(R1)
+		MOV	(SP)+,R5
+		MOV	(SP)+,R4
+		MOV	(SP)+,R3
+		MOV	(SP)+,R2
+		MOV	(SP)+,R1
+		RETURN
+
+X_NONE:		RETURN
+
+; register the door-opening animation at cell offset R2 (ZX DA63)
+X_DOOR:		MOV	#DOORSL,R3
+		MOV	#6,R1
+1$:		TSTB	(R3)
+		BEQ	2$
+		ADD	#3,R3
+		SOB	R1,1$
+		RETURN				; no free slot
+2$:		MOVB	#1,(R3)+
+		MOVB	R2,(R3)+		; cell offset, little endian
+		MOV	R2,R1
+		SWAB	R1
+		MOVB	R1,(R3)
+		MOV	R2,R0
+		MOV	#40,R1			; draw the opened doorway base
+		CALL	PUT_TILE
+		MOV	#BRUCE,R0
+		RETURN
+
+; door slots: one tick (ZX D9D7); call once per frame from hazards
+DOOR_TICK:	MOV	R0,-(SP)
+		MOV	#DOORSL,R2
+		MOV	#6,R5
+1$:		TSTB	(R2)
+		BEQ	8$
+		INCB	(R2)
+		MOVB	(R2),R1
+		BIC	#177400,R1
+		MOVB	1(R2),R0		; cell offset
+		BIC	#177400,R0
+		MOVB	2(R2),R3
+		SWAB	R3
+		BIC	#377,R3
+		BIS	R3,R0
+		CMP	R1,#24			; 20.: doorway shows
+		BNE	2$
+		MOV	R2,-(SP)
+		MOV	R5,-(SP)
+		MOV	#10,R1
+		CALL	PUT_TILE
+		BR	7$
+2$:		CMP	R1,#31			; 25. / 40.: frame pattern A
+		BEQ	3$
+		CMP	R1,#50
+		BEQ	3$
+		CMP	R1,#36			; 30.: pattern B
+		BEQ	4$
+		CMP	R1,#55			; 45.: pattern C
+		BEQ	5$
+		CMP	R1,#62			; 50.: doorway again
+		BEQ	6$
+		CMP	R1,#67			; 55.: restore, slot free
+		BNE	8$
+		MOV	R2,-(SP)
+		MOV	R5,-(SP)
+		CALL	RESTORE_TILE
+		MOV	(SP)+,R5
+		MOV	(SP)+,R2
+		CLRB	(R2)
+		BR	8$
+3$:		MOV	#DOORCOLA,R4
+		BR	66$
+4$:		MOV	#DOORCOLB,R4
+		BR	66$
+5$:		MOV	#DOORCOLC,R4
+		BR	66$
+6$:		MOV	R2,-(SP)
+		MOV	R5,-(SP)
+		MOV	#40,R1
+		CALL	PUT_TILE
+		BR	7$
+66$:		MOV	R2,-(SP)		; 2x3 block around the cell
+		MOV	R5,-(SP)
+		SUB	#41,R0			; up-left
+		MOV	#2,R5
+67$:		MOV	#3,R2
+68$:		MOVB	(R4)+,R1
+		BIC	#177400,R1
+		MOV	R0,-(SP)
+		CALL	PUT_TILE
+		MOV	(SP)+,R0
+		INC	R0
+		SOB	R2,68$
+		ADD	#35,R0			; next row, back 3
+		SOB	R5,67$
+7$:		MOV	(SP)+,R5
+		MOV	(SP)+,R2
+8$:		ADD	#3,R2
+		DEC	R5
+		BEQ	88$
+		JMP	1$
+88$:		MOV	(SP)+,R0
+		RETURN
+
+DOORCOLA:	.BYTE	40,14,40,11,12,13	; ZX DA51
+DOORCOLB:	.BYTE	15,16,17,11,12,13	; ZX DA57
+DOORCOLC:	.BYTE	40,40,40,40,10,40	; ZX DA5D
+		.EVEN
+
+; ------------------------------------------------------------------
+; per-chamber pickup handlers (ZX D7D4 table).  In: R4 = col,
+; R5 = row of the collected lantern.  May clobber R1..R3.
+P_TAB:		.WORD	P_CH012,P_CH012,P_CH012,X_NONE,P_CH4
+		.WORD	P_CH5,P_CH6,P_CH7,P_CH8,P_CH9
+		.WORD	P_CH10,X_NONE,P_CH12,P_CH13,P_CH14
+		.WORD	X_NONE,X_NONE,X_NONE,P_CH18,X_NONE
+
+; exit-touch handlers (ZX D7FC table)
+X_TAB:		.WORD	X_NONE,X_NONE,X_NONE,X_NONE,X_NONE
+		.WORD	X_DOOR,X_DOOR,X_NONE,X_NONE,X_NONE
+		.WORD	X_DOOR,X_DOOR,X_DOOR,X_DOOR,X_DOOR
+		.WORD	X_NONE,X_NONE,X_NONE,X_NONE,X_NONE
+
+; open a patch group elsewhere: R1 = chamber, R2 = col, R3 = row
+OPEN_AT:	MOV	R4,-(SP)
+		MOV	R5,-(SP)
+		MOV	R2,R4
+		MOV	R3,R5
+		CALL	LANTERN_TAKE
+		MOV	(SP)+,R5
+		MOV	(SP)+,R4
+		RETURN
+
+; chambers 0-2 share the lantern count: 21 open the vault (ZX D845)
+P_CH012:	INCB	CHCNT+0
+		CMPB	CHCNT+0,#25
+		BNE	9$
+		MOV	#1,R1
+		MOV	#17,R2
+		MOV	#27,R3
+		CALL	OPEN_AT
+9$:		RETURN
+
+P_CH4:		CMP	R5,#20			; upper lantern row? (ZX D856)
+		BHIS	1$
+		CMP	R4,#33
+		BLO	9$
+		MOVB	#1,CHCNT+30
+		MOV	#2,R1
+		MOV	#37,R2
+		MOV	#21,R3
+		CALL	OPEN_AT
+		RETURN
+1$:		INCB	CHCNT+2
+		MOVB	CHCNT+2,R1
+		CMPB	R1,#4
+		BNE	2$
+		MOV	#4,R1
+		CLR	R2
+		MOV	#22,R3
+		CALL	OPEN_AT
+		RETURN
+2$:		CMPB	R1,#2
+		BNE	9$
+		MOV	#4,R1
+		MOV	#22,R2
+		MOV	#21,R3
+		CALL	OPEN_AT
+9$:		RETURN
+
+P_CH5:		INCB	CHCNT+26		; (ZX D888)
+		CMPB	CHCNT+26,#10
+		BNE	9$
+		MOV	#5,R1
+		CLR	R2
+		MOV	#3,R3
+		CALL	OPEN_AT
+9$:		RETURN
+
+P_CH6:		CMP	R5,#17			; (ZX D898)
+		BHIS	1$
+		INCB	CHCNT+4
+		MOVB	CHCNT+4,R1
+		CMPB	R1,#5
+		BNE	11$
+		MOV	#6,R1
+		MOV	#33,R2
+		MOV	#3,R3
+		CALL	OPEN_AT
+		RETURN
+11$:		CMPB	R1,#12
+		BNE	9$
+		MOV	#6,R1
+		MOV	#37,R2
+		MOV	#11,R3
+		CALL	OPEN_AT
+		RETURN
+1$:		INCB	CHCNT+6
+		CMPB	CHCNT+6,#2
+		BLO	9$
+		MOVB	#34,PLANT1+1		; redirect the vine
+		MOVB	#5,PLANT1+2
+		MOVB	#1,PLANT1+3
+		MOV	#7,R1
+		MOV	#13,R2
+		MOV	#13,R3
+		CALL	OPEN_AT
+9$:		RETURN
+
+P_CH7:		CMP	R4,#6			; (ZX D8D4)
+		BHIS	1$
+		MOVB	#5,PLANT1+1
+		MOVB	#34,PLANT1+2
+		CLRB	PLANT1+3
+		MOV	#7,R1
+		CLR	R2
+		MOV	#21,R3
+		CALL	OPEN_AT
+		RETURN
+1$:		CMP	R4,#25
+		BHIS	9$
+		INCB	CHCNT+10
+		CMPB	CHCNT+10,#2
+		BLO	9$
+		CALL	BOLT_ON
+		MOV	#7,R1
+		MOV	#24,R2
+		MOV	#13,R3
+		CALL	OPEN_AT
+9$:		RETURN
+
+P_CH8:		CMP	R5,#6			; (ZX D902)
+		BHIS	1$
+		CALL	BOLT_ON
+		RETURN
+1$:		CMP	R5,#21
+		BLO	9$
+		CMP	R4,#31
+		BLO	2$
+		CALL	BOLT_ON2
+		RETURN
+2$:		INCB	CHCNT+32
+		CMPB	CHCNT+32,#2
+		BNE	9$
+		MOVB	PLANT2+1,PLANT3+1	; second vine follows
+		MOV	#7,R1
+		MOV	#37,R2
+		MOV	#3,R3
+		CALL	OPEN_AT
+9$:		RETURN
+
+P_CH9:		INCB	CHCNT+12		; (ZX D928)
+		CMPB	CHCNT+12,#2
+		BLO	9$
+		MOV	#11,R1
+		MOV	#30,R2
+		MOV	#27,R3
+		CALL	OPEN_AT
+9$:		RETURN
+
+P_CH10:		INCB	CHCNT+14		; (ZX D938)
+		CMPB	CHCNT+14,#3
+		BNE	9$
+		MOV	#12,R1
+		MOV	#37,R2
+		MOV	#4,R3
+		CALL	OPEN_AT
+9$:		RETURN
+
+P_CH12:		INCB	CHCNT+16		; (ZX D948)
+		CMPB	CHCNT+16,#3
+		BNE	9$
+		MOV	#14,R1
+		MOV	#37,R2
+		MOV	#13,R3
+		CALL	OPEN_AT
+9$:		RETURN
+
+P_CH13:		CMP	R5,#20			; (ZX D958)
+		BHIS	1$
+		INCB	CHCNT+20
+		CMPB	CHCNT+20,#2
+		BNE	9$
+		MOV	#15,R1
+		MOV	#37,R2
+		MOV	#4,R3
+		CALL	OPEN_AT
+		RETURN
+1$:		INCB	CHCNT+22
+		CMPB	CHCNT+22,#2
+		BNE	9$
+		MOV	#15,R1
+		MOV	#37,R2
+		MOV	#22,R3
+		CALL	OPEN_AT
+9$:		RETURN
+
+P_CH14:		INCB	CHCNT+24		; (ZX D97D)
+		CMPB	CHCNT+24,#2
+		BNE	9$
+		MOV	#16,R1
+		CLR	R2
+		MOV	#13,R3
+		CALL	OPEN_AT
+9$:		RETURN
+
+; the last lantern of chamber 18: fanfare and on to the wizard
+P_CH18:		MOV	#S_B3000,R3		; (ZX D98D)
+		CALL	SCORE_ADD
+		MOV	#1,EXITFLAG
+		RETURN

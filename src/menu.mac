@@ -1,0 +1,71 @@
+; ------------------------------------------------------------------
+; Main menu (native UKNC screen): choose players / opponent, start.
+; ------------------------------------------------------------------
+
+MENU:		CALL	CLEAR_BUF
+		MOV	#3*40+7,R0
+		MOV	#S_TITLE,R3
+		CALL	PRINT_STR
+		MOV	#7*40+4,R0
+		MOV	#S_MPLAYERS,R3
+		CALL	PRINT_STR
+		MOV	#11.*40+4,R0
+		MOV	#S_MYAMO,R3
+		CALL	PRINT_STR
+		MOV	#15.*40+4,R0
+		MOV	#S_MSTART,R3
+		CALL	PRINT_STR
+		MOV	#21.*40+3,R0
+		MOV	#S_MCREDIT,R3
+		CALL	PRINT_STR
+		CALL	MENU_VALS
+		CALL	BLIT_FULL
+		MOV	#1,SND_MODE	; title tune
+
+1$:		CALL	VSYNC
+		CALL	GET_KEY
+		TST	R0
+		BEQ	1$
+		BIT	#1,R0		; up: players
+		BEQ	2$
+		MOV	#1,R1
+		SUB	TWOPLAYER,R1
+		MOV	R1,TWOPLAYER
+		BR	5$
+2$:		BIT	#4,R0		; down: Yamo human/computer
+		BEQ	3$
+		MOV	#1,R1
+		SUB	YAMO_HUMAN,R1
+		MOV	R1,YAMO_HUMAN
+		BR	5$
+3$:		BIT	#20,R0		; ENTER: start
+		BEQ	1$
+		CLR	SND_MODE	; stop the tune
+		RETURN
+5$:		CALL	MENU_VALS
+		MOV	#7*40,R0	; redraw the option rows
+		MOV	#40,R1
+		MOV	#5,R2
+		CALL	BLIT_RECT
+		BR	1$
+
+MENU_VALS:	MOV	#7*40+24.,R0	; players: 1/2
+		MOV	#S_M1,R3
+		TST	TWOPLAYER
+		BEQ	1$
+		MOV	#S_M2,R3
+1$:		CALL	PRINT_STR
+		MOV	#11.*40+24.,R0	; Yamo: computer/player 2
+		MOV	#S_MCOMP,R3
+		TST	YAMO_HUMAN
+		BEQ	2$
+		MOV	#S_MHUM,R3
+2$:		CALL	PRINT_STR
+		RETURN
+
+; clear the whole back buffer to black
+CLEAR_BUF:	MOV	#BUF,R2
+		MOV	#14000,R1	; 6144. words = 24 rows
+1$:		CLR	(R2)+
+		SOB	R1,1$
+		RETURN

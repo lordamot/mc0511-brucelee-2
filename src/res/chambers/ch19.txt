@@ -1,0 +1,42 @@
+# Chamber 19
+
+spawn_a   2 5 80   # col row flags(bit0 facing, bit7 enemies blocked)
+spawn_b   1 15 80
+border    0
+col_thr   10 20
+row_thr   9 16
+exit 0    death
+exit 1    death
+exit 2    death
+exit 3    18 27 20
+exit 4    death
+exit 5    death
+exit 6    death
+exit 7    death
+exit 8    death
+
+map
+20 20 20 20 96 96 20 20 20 20 20 20 96 96 20 20 20 20 20 20 20 20 96 96 20 20 20 20 20 20 96 96
+20 20 20 20 2e 2f 20 20 20 20 20 20 2e 2f 20 20 20 20 20 20 20 20 2e 2f 20 20 20 20 20 20 2e 2f
+20 20 20 7e 7e 7e 20 f0 f1 20 7e 7e 7e 7f 7f 7f 20 20 20 20 7e 7e 7e 7f 7f 7f 20 f0 f1 20 7e 7e
+20 20 20 7f 7f 7f 20 f2 f3 20 7f 7f 7f 7e 7e 7e 20 f0 f1 20 7f 7f 7f 7e 7e 7e 20 f2 f3 20 7e 7e
+20 20 20 7e 7e 7e 20 f0 f1 20 7e 7e 71 72 7f 7f 20 f2 f3 20 7e 7e 71 72 7f 7f 20 f0 f1 20 7f 7f
+20 20 20 7f 7f 7f 20 f2 f3 20 7f 7f 73 74 7e 7e 20 f0 f1 20 7f 7f 73 74 7e 7e 20 f2 f3 20 7e 7e
+20 20 20 7f 7e 20 20 20 20 20 20 7e 7e 7f 7f 20 20 f2 f3 20 20 7e 7e 7f 7f 20 20 20 20 20 20 7e
+20 20 20 7f 7e 20 20 20 20 20 20 7f 7f 7e 7e 20 20 20 20 20 20 7f 7f 7e 7e 20 20 20 20 20 20 7f
+20 20 20 7f 7e 7f 20 f4 f5 20 7e 7f 27 27 7e 7f 20 96 96 20 7e 7f 27 27 7e 7f 20 f4 f5 20 7e 7f
+20 20 20 7e 7f 7e 20 f6 f7 20 7f 7e f8 f9 7f 7e 20 2e 2f 20 7f 7e f8 f9 7f 7e 20 f6 f7 20 7f 7e
+20 20 20 7f 7e 7f 27 27 27 27 7e 7f 25 25 7e 7f 20 f4 f5 20 7e 7f 25 25 7e 7f 27 27 27 27 7e 7f
+20 20 20 7e 7f 7e f8 25 25 f9 7f 7e 25 25 7f 7e 20 f6 f7 20 7f 7e 25 25 7f 7e f8 25 25 f9 7f 7e
+20 20 20 7f 7e 7f 25 25 25 25 7e 7f 25 25 7e 7f 27 27 27 27 7e 7f 25 25 7e 7f 25 25 25 25 7e 7f
+20 20 20 7e 7f 7e 25 25 25 25 7f 7e 25 25 7f 7e f8 25 25 f9 7f 7e 25 25 7f 7e 25 25 25 25 7f 7e
+20 20 20 7f 7e 7f 25 25 25 25 7e 7f 25 25 7e 7e 25 25 25 25 7e 7f 25 25 7e 7f 25 25 25 25 7e 7f
+20 20 20 7e 7f 7e 25 25 25 25 7f 7e 25 25 7f 7e fa fb fc 25 7f 7e 25 25 7f 7e fc 25 25 25 7f 7e
+20 20 20 7f 7e 7f 25 25 25 25 7e 7f 25 25 7e 7f fd fe 30 fc 7e 7f 25 25 7e 7f fb fc 25 25 7e 7f
+20 20 20 7e 7f 7e fc 25 25 25 7f 7e fd fb 7f 7e fe fd fc 30 7e 7f 25 25 7f 7e 22 22 fe fc 7f 7e
+20 20 20 7f 7e 7f 22 fe fc 25 7e 7f fe 22 7e 7f fd fd 30 fe 7e 7f 25 fa 7e 7f 22 fe fd fc 7e 7f
+7f 7e 7f 7e 7f 7e fd fe 30 fe 7f 7e 30 fe 7f 7e fd fe fd fe 7f 7e fe fd 7f 7e 22 fe 30 fd 7e 7f
+7e 7f 7e 7f 7e 24 22 fe fd fe 7e 7f fe fe 7e 7f 30 fd fe 22 23 7f fd fe 7e 7f fe fd fe fd 23 7e
+7f 7e 7f 7e 24 fe fd fd fe fd 23 23 22 fe 7f 24 22 fe fe 22 fd fe fd 30 23 7e 22 fd fe fe 30 23
+
+patches
