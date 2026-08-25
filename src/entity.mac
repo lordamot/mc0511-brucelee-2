@@ -418,8 +418,24 @@ H_LIEDOWN:	MOVB	E.CMD(R0),R1
 		MOV	#1,R1
 		RETURN
 
+; up mid-jump: grab a ladder / climbing chute the arc passes through
+; instead of riding it out.  R1 = the climb state, or 0 to carry on.
+JUMP_GRAB:	BITB	#10,E.CMD(R0)		; up held (alone or diagonal)?
+		BEQ	9$
+		CALL	CLIMB_CHK
+		BNE	9$
+		CALL	CLIMB_SNAP
+		CLRB	E.YOFF(R0)
+		MOV	#16,R1			; -> climbing
+		RETURN
+9$:		CLR	R1
+		RETURN
+
 ; jump straight up (ZX CFCE)
-H_JUMPUP:	CALL	JUMP_ARC
+H_JUMPUP:	CALL	JUMP_GRAB
+		TST	R1
+		BNE	9$
+		CALL	JUMP_ARC
 		TST	R1
 		BEQ	2$
 		BITB	#1,E.FACE(R0)
@@ -431,19 +447,22 @@ H_JUMPUP:	CALL	JUMP_ARC
 		BEQ	2$
 		DECB	E.COL(R0)
 3$:		MOV	#12,R1
-		RETURN
+9$:		RETURN
 2$:		INCB	E.ROW(R0)
 		CLRB	E.YOFF(R0)
 		MOV	#2,R1
 		JMP	STEP_RET
 
 ; forward jump (ZX CFF8)
-H_JUMPFWD:	CALL	JUMP_ARC
+H_JUMPFWD:	CALL	JUMP_GRAB
+		TST	R1
+		BNE	9$
+		CALL	JUMP_ARC
 		BITB	#1,E.FACE(R0)
 		BNE	1$
 		INCB	E.COL(R0)
 1$:		MOV	#11,R1
-		RETURN
+9$:		RETURN
 
 ; jump arc table step (ZX D007): E.C12 indexes the height profile
 JUMP_ARC:	INCB	E.C12(R0)

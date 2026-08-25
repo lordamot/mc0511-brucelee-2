@@ -250,11 +250,15 @@ DOOR_TICK:	MOV	R0,-(SP)
 		SUB	#41,R0			; up-left
 		MOV	#2,R5
 67$:		MOV	#3,R2
-68$:		MOVB	(R4)+,R1
-		BIC	#177400,R1
-		MOV	R0,-(SP)
+68$:		MOVB	(R4)+,R1		; PUT_TILE keeps only R0: the
+		BIC	#177400,R1		; counters and the colour
+		MOV	R2,-(SP)		; pointer must be saved
+		MOV	R4,-(SP)
+		MOV	R5,-(SP)
 		CALL	PUT_TILE
-		MOV	(SP)+,R0
+		MOV	(SP)+,R5
+		MOV	(SP)+,R4
+		MOV	(SP)+,R2
 		INC	R0
 		SOB	R2,68$
 		ADD	#35,R0			; next row, back 3

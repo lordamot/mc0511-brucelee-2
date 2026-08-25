@@ -215,7 +215,7 @@ ENT_DRAW:	MOVB	E.STATE(R0),R1
 		MOV	R2,-(SP)	; row start address
 2$:		MOVB	(R3)+,R0
 		BIC	#177400,R0
-		CMP	R2,#BUF+27600	; clip: 8 lines must stay in BUF
+		CMP	R2,#BUF+27100	; clip: 8 lines must stay in BUF
 		BHIS	3$
 		MOV	R3,-(SP)
 		MOV	R4,-(SP)
@@ -244,7 +244,7 @@ ENT_RESTORE:	MOVB	E.STATE(R0),R1
 		MOV	#5,R5		; 5 rows, clipped to the screen
 		MOVB	E.ROW(R0),R2
 		BIC	#177400,R2
-		MOV	#30.,R1
+		MOV	#24.,R1
 		SUB	R2,R1		; 24 - row
 		CMP	R1,R5
 		BHIS	1$

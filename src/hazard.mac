@@ -117,22 +117,26 @@ HZ_CH9:		INCB	CHCNT+30
 1$:		MOV	R0,-(SP)
 		MOV	#11.*40+10,R0		; six cells at (8,9)
 		MOV	#6,R4
-2$:		MOV	R2,R1
-		MOV	R0,-(SP)
+2$:		MOV	R2,R1			; PUT_TILE keeps only R0: the
+		MOV	R2,-(SP)		; tile codes and the counter
+		MOV	R3,-(SP)		; must be saved
 		MOV	R4,-(SP)
 		CALL	PUT_TILE
 		MOV	(SP)+,R4
-		MOV	(SP)+,R0
+		MOV	(SP)+,R3
+		MOV	(SP)+,R2
 		INC	R0
 		SOB	R4,2$
 		MOV	#11.*40+20,R0		; six cells at (16,9)
 		MOV	#6,R4
 3$:		MOV	R3,R1
-		MOV	R0,-(SP)
+		MOV	R2,-(SP)
+		MOV	R3,-(SP)
 		MOV	R4,-(SP)
 		CALL	PUT_TILE
 		MOV	(SP)+,R4
-		MOV	(SP)+,R0
+		MOV	(SP)+,R3
+		MOV	(SP)+,R2
 		INC	R0
 		SOB	R4,3$
 		MOV	(SP)+,R0
