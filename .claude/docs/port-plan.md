@@ -62,9 +62,16 @@ the ZX data (music.json), speaker = bit 7 of PPU port 177716.
 CPU->PPU mailbox in CPU RAM selects song/SFX; K1 commands as in
 openit (screen setup, palette).
 
-Keyboard mapping (PPU): arrows = move/jump/duck, FIKS (0107) = P1
-fire, numpad ENTER (0166) = P2 fire (Yamo), AP2/STOP = pause menu,
-ENTER = menu select.  Fire+direction = punch/kick as on ZX kempston.
+Keyboard mapping (PPU): arrows = move/jump/duck, FIKS (0107) or
+space (0113) = P1 fire, numpad ENTER (0166) = P2 fire (Yamo),
+AP2/STOP = pause menu, ENTER = menu select.  Moves as on the ZX:
+fire standing = fist strike, fire mid-walk = flying kick (two run-up
+steps), up standing = vertical jump, up mid-walk = side jump, down =
+lie-flat dodge - except over a ladder, where it climbs down (port
+extension; entity.mac LADDER_CHK + CLIMB_SNAP centre Bruce on the
+ladder so 2-cell ladders through one-hole floors pass).  Note the
+UKNC key matrix reports one event per row: space shares row 013 with
+RIGHT/ENTER, so use FIKS for fire+direction combos.
 
 ## The game engine (ported 1:1 from the RE, see re-notes.md)
 

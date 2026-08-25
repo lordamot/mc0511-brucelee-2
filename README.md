@@ -33,9 +33,12 @@ make verify    # generators, title round-trip, image checks, plus a
 
 In `make run` the firmware boot menu loads the disk automatically;
 the title picture shows for ~10 s (any key skips it).  Controls:
-arrows = move/jump/duck/climb, ФИКС (mapped to LCtrl) = player 1
-fire (fire+direction = punch/kick), numpad Enter (RCtrl) = player 2
-fire, Enter = menu select, АП2/СТОП = pause.
+arrows = move/jump/duck/climb, ФИКС (mapped to LCtrl and Space) =
+player 1 fire, numpad Enter (RCtrl) = player 2 fire, Enter = menu
+select, АП2/СТОП = pause.  Moves: fire standing = fist strike, fire
+while running = flying kick, up standing = vertical jump, up while
+walking = side jump, down = lie-flat dodge, and down on top of a
+ladder climbs down it (climbing auto-centres on the ladder).
 
 ## Project layout
 

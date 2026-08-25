@@ -240,7 +240,7 @@ int main(int argc, char *argv[])
         fprintf(stderr, "SDL_Init failed: %s\n", SDL_GetError());
         return 1;
     }
-    SDL_Window *win = SDL_CreateWindow("OPEN IT!  \xd0\xa3\xd0\x9a\xd0\x9d\xd0\xa6 \xd0\x9c\xd0\xa1-0511",
+    SDL_Window *win = SDL_CreateWindow("Bruce Lee  \xd0\xa3\xd0\x9a\xd0\x9d\xd0\xa6 \xd0\x9c\xd0\xa1-0511",
                                        (int)SDL_WINDOWPOS_CENTERED,
                                        (int)SDL_WINDOWPOS_CENTERED,
                                        1280, 960, SDL_WINDOW_RESIZABLE);

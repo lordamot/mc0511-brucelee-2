@@ -45,7 +45,7 @@ DI, I=0x3F.  The game then rebuilds its own IM2 world: vector table
 | 0xA800-0xAFFF | sprite glyph cells, pre-shifted 4px |
 | 0xB000-0xBFFF | masks for the above (+0x1000 from data) |
 | 0xC003-0xDE47 | game code (ISR, main loop, entities, draw) |
-| 0xCB1C/0xCBBE/0xCCA5 | entity records: Bruce, Yamo, Ninja |
+| 0xCB1C/0xCBBE/0xCCA5 | entity records: Ninja, Yamo, Bruce (D675 feeds FE11 to 0xCCA5 = Bruce; 0xCB1C is skipped in CD9B's up-diagonal jump = the ninja) |
 | 0xE000-0xF7FF | off-screen pixel back buffer (linear cell layout) |
 | 0xF800-0xFAFF | off-screen attr back buffer |
 | 0xFD00-0xFE01 | IM2 vector table (0xFE) |
@@ -65,6 +65,7 @@ DI, I=0x3F.  The game then rebuilds its own IM2 world: vector table
 | FE0B | attract/demo flag (0 = normal play) |
 | FE0D | ? (affects enemy activation delay 0x0A vs 0x28) |
 | FE10 | raw input byte this frame (kempston bit order: R,L,D,U,F) |
+| | command values (hex!): 1 R, 2 L, 4 D, 8 U, 9/0xA = up+dir (stand: start run CDAB; walk: vault jump CE89/CED3), 0x10 = fire (stand: fist strike 0x16 at CDE9), 0x11/0x12 = fire+dir (walk: flying kick, state 4, run-up >= 2 at CE73/CEBD) |
 | FE11/12 | processed input word |
 | FE13/14 | previous input P1/P2 |
 | FE15 | bit0: current player flag |

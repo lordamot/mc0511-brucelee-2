@@ -185,7 +185,7 @@ def extract_cells(mem, out, gbase=0xA000, mbase=0xB000, which="right-facing"):
 
 HANDLER_NAMES = {
     0xCD9B: "H_STAND", 0xCE48: "H_WALK", 0xCF04: "H_STEP", 0xCF18: "H_PUNCH",
-    0xCF2D: "H_PUNCH2", 0xCF59: "H_DUCK", 0xCFB3: "H_DUCKWALK", 0xCFBD: "H_CLIMBUP",
+    0xCF2D: "H_PUNCH2", 0xCF59: "H_DUCK", 0xCFB3: "H_DUCKWALK", 0xCFBD: "H_LIEDOWN",
     0xCFCE: "H_JUMPUP", 0xCFF8: "H_JUMPFWD", 0xD023: "H_JUMPFWD2", 0xD032: "H_HANG",
     0xD03F: "H_FALL", 0xD063: "H_CLIMB", 0xD10D: "H_CLIMB2", 0xCB8A: "H_NOP",
     0xD112: "H_FALLING", 0xD15D: "H_KNOCKDOWN", 0xD16F: "H_STAGGER",

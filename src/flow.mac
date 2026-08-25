@@ -31,8 +31,8 @@ ENT_INIT:	MOV	#ST_NINJA,NINJA+E.STB
 GAME_START:	CALL	ENT_INIT
 		MOV	#1,PLAYER
 		MOV	#SCORE1,R2	; both scores "000000"
-		MOV	#14.,R1
-1$:		MOVB	#60,(R2)+
+		MOV	#12.,R1		; 2 x 6 digits (no more: NINJA
+1$:		MOVB	#60,(R2)+	; follows SCORE2 in memory)
 		SOB	R1,1$
 		MOVB	#60,HUDFALLS	; falls: "04" (or "09" for two)
 		MOVB	#64,HUDFALLS+1

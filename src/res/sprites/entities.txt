@@ -192,6 +192,7 @@ entity ninja tick=4 color=7
  state 13 frame=f_cb8d handler=H_STAGGER
  state 14 frame=f_cb8d handler=H_STAGGER2
  state 15 frame=f_cba5 handler=H_THROWN
+ state 16 frame=f_cbb3 handler=H_KICK
 
 entity yamo tick=5 color=7
  state 01 frame=f_cc2c handler=H_STAND
@@ -225,7 +226,7 @@ entity bruce tick=3 color=7
  state 05 frame=f_cd33 handler=H_PUNCH2
  state 06 frame=f_cd3b handler=H_DUCK
  state 07 frame=f_cd43 handler=H_DUCKWALK
- state 08 frame=f_cd4b handler=H_CLIMBUP
+ state 08 frame=f_cd4b handler=H_LIEDOWN
  state 09 frame=f_cd50 handler=H_JUMPUP
  state 0a frame=f_cd58 handler=H_JUMPFWD
  state 0b frame=f_cd63 handler=H_JUMPFWD2

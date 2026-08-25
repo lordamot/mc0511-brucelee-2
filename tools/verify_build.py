@@ -26,6 +26,17 @@ Check groups:
               place (ZX D112), and picking a lamp up scores 125 and
               removes it from the map
 
+  moves       Bruce's moves: fire standing = the fist strike, fire
+              mid-walk = the flying kick, up mid-walk = the side
+              jump, down over a ladder = climb down centred on it,
+              and a misaligned climb from the bottom still passes
+              the one-hole floor at the top (CLIMB_SNAP)
+
+  enemies     the ninja: activates promptly at his own rate (the
+              score fill must not spill into his record), walks at
+              the ZX pace and actually strikes an adjacent Bruce
+              (state 0x16 exists in his state table)
+
 Usage:
     python3 tools/verify_build.py [--skip-smoke]
 """
@@ -249,6 +260,137 @@ quit
     check("collected lamp leaves the map", lamp != 0x10, f"tile={lamp:02x}")
 
 
+GAME_START_SCRIPT = """\
+run 900
+press 030
+run 30
+press 153
+run 350
+press 153
+run 100
+press 153
+run 60
+"""
+
+
+def ent_rec(path):
+    """Entity record dump -> dict of the interesting fields."""
+    b = Path(path).read_bytes()
+    return {"tick": b[0], "reload": b[1], "state": b[2], "yoff": b[4],
+            "col": b[6], "row": b[7], "death": b[10], "dmg": b[14]}
+
+
+def verify_moves(tmp):
+    bruce = symbol_addr("BRUCE")
+    ninja = symbol_addr("NINJA")
+    yamo = symbol_addr("YAMO")
+    lines = [GAME_START_SCRIPT,
+             # keep the enemies hidden while testing Bruce's moves
+             f"pokecpu {ninja + 16:o} 377",
+             f"pokecpu {yamo + 16:o} 377"]
+    # fire standing: the fist strike (0x16), then its recovery (0x0b)
+    lines += ["keydown 107"]
+    for i in range(6):
+        lines += ["run 2", f"dumpcpu {bruce:o} 20 {tmp}/m-fist{i}.bin"]
+    lines += ["keyup 107", "run 20"]
+    # fire mid-walk: the flying kick (states 4/5, ZX 0x11 command)
+    lines += ["keydown 133", "run 12", "keydown 107"]
+    for i in range(8):
+        lines += ["run 2", f"dumpcpu {bruce:o} 20 {tmp}/m-kick{i}.bin"]
+    # separate key releases with a run: the ROM keyboard scan delivers
+    # one release event per pass, simultaneous ones lose a key
+    lines += ["keyup 107", "run 3", "keyup 133", "run 30"]
+    # up mid-walk: the side jump (states 9/0xA, row-1; ZX 0x09 command)
+    lines += [f"pokecpu {bruce + 2:o} 1", f"pokecpu {bruce + 4:o} 0",
+              f"pokecpu {bruce + 6:o} 4 6", "run 5",
+              "keydown 133", "run 15", "keydown 154"]
+    for i in range(8):
+        lines += ["run 2", f"dumpcpu {bruce:o} 20 {tmp}/m-jump{i}.bin"]
+    lines += ["keyup 154", "run 3", "keyup 133", "run 30"]
+    # down over the chamber-0 ladder, one column off: descend centred
+    lines += [f"pokecpu {bruce + 2:o} 1", f"pokecpu {bruce + 4:o} 0",
+              f"pokecpu {bruce + 6:o} 13 6", "run 5",
+              "keydown 134", "run 40",
+              f"dumpcpu {bruce:o} 20 {tmp}/m-down.bin",
+              "keyup 134", "run 10"]
+    # climb from the bottom, one column off: snap must centre Bruce so
+    # the one-hole floor at the ladder top lets him through
+    lines += [f"pokecpu {bruce + 2:o} 1", f"pokecpu {bruce + 4:o} 0",
+              f"pokecpu {bruce + 6:o} 15 24", "run 5",
+              "keydown 154", "run 300", "keyup 154", "run 25",
+              f"dumpcpu {bruce:o} 20 {tmp}/m-top.bin", "quit"]
+    script = tmp / "moves.script"
+    script.write_text("\n".join(lines) + "\n")
+    r = run([REPO_ROOT / "bin/ukncbtl/uknc-headless",
+             "--rom", REPO_ROOT / "bin/ukncbtl/uknc_rom.bin",
+             "--disk", REPO_ROOT / "build/brucelee.dsk",
+             "--script", script], timeout=300)
+    check("moves script runs", r.returncode == 0, r.stderr.strip())
+    if r.returncode != 0:
+        return
+
+    seen = {ent_rec(tmp / f"m-fist{i}.bin")["state"] for i in range(6)}
+    check("fire standing does the fist strike (0x16)",
+          seen & {0x16, 0x0B} != set(), f"states={sorted(map(hex, seen))}")
+
+    seen = {ent_rec(tmp / f"m-kick{i}.bin")["state"] for i in range(8)}
+    check("fire mid-walk does the flying kick (04/05)",
+          seen & {0x04, 0x05} != set(), f"states={sorted(map(hex, seen))}")
+
+    jumps = [ent_rec(tmp / f"m-jump{i}.bin") for i in range(8)]
+    ok = any(j["state"] in (0x09, 0x0A) and j["row"] == 5 for j in jumps)
+    check("up mid-walk does the side jump (09/0A, row-1)", ok,
+          " ".join(f"{j['state']:02x}@{j['row']}" for j in jumps))
+
+    d = ent_rec(tmp / "m-down.bin")
+    check("down over the ladder descends centred",
+          d["state"] in (0x0E, 0x0F) and d["col"] == 12 and d["row"] >= 9,
+          f"state={d['state']:02x} col={d['col']} row={d['row']}")
+
+    t = ent_rec(tmp / "m-top.bin")
+    check("misaligned climb passes the floor hole to the top",
+          t["state"] == 1 and t["col"] == 12 and t["row"] == 6,
+          f"state={t['state']:02x} col={t['col']} row={t['row']}")
+
+
+def verify_enemies(tmp):
+    bruce = symbol_addr("BRUCE")
+    ninja = symbol_addr("NINJA")
+    lines = [GAME_START_SCRIPT,
+             f"pokecpu {bruce + 6:o} 10 24",     # Bruce to the bottom floor
+             "run 20", f"dumpcpu {ninja:o} 20 {tmp}/n-act.bin",
+             "run 50"]
+    for i in range(16):
+        lines += ["run 10", f"dumpcpu {ninja:o} 20 {tmp}/n{i}.bin",
+                  f"dumpcpu {bruce:o} 20 {tmp}/nb{i}.bin"]
+    lines += ["quit"]
+    script = tmp / "enemies.script"
+    script.write_text("\n".join(lines) + "\n")
+    r = run([REPO_ROOT / "bin/ukncbtl/uknc-headless",
+             "--rom", REPO_ROOT / "bin/ukncbtl/uknc_rom.bin",
+             "--disk", REPO_ROOT / "build/brucelee.dsk",
+             "--script", script], timeout=300)
+    check("enemies script runs", r.returncode == 0, r.stderr.strip())
+    if r.returncode != 0:
+        return
+
+    act = ent_rec(tmp / "n-act.bin")
+    check("ninja record keeps its rate (score fill overflow)",
+          act["reload"] == 4 and act["tick"] <= 4,
+          f"reload={act['reload']} tick={act['tick']}")
+
+    recs = [ent_rec(tmp / f"n{i}.bin") for i in range(16)]
+    check("ninja activates promptly", recs[0]["state"] != 0,
+          "still hidden after ~5 s")
+    walked = [r_["col"] for r_ in recs if r_["row"] == 20]
+    check("ninja walks the bottom floor towards Bruce",
+          len(walked) >= 2 and walked[0] - walked[-1] >= 3,
+          f"cols={walked}")
+    dmg = max(ent_rec(tmp / f"nb{i}.bin")["dmg"] for i in range(16))
+    check("ninja strikes an adjacent Bruce (state 0x16)", dmg > 0,
+          "Bruce took no damage")
+
+
 def main(argv=None):
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     ap.add_argument("--skip-smoke", action="store_true")
@@ -267,6 +409,10 @@ def main(argv=None):
             verify_smoke(tmp)
             print("gameplay:")
             verify_gameplay(tmp)
+            print("moves:")
+            verify_moves(tmp)
+            print("enemies:")
+            verify_enemies(tmp)
 
     if failures:
         print(f"\n{len(failures)} check(s) FAILED: " + ", ".join(failures))

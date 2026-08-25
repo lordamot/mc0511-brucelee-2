@@ -114,7 +114,8 @@ STEP_SND:	CMP	R0,#BRUCE
 ; ------------------------------------------------------------------
 ; state handlers.  In: R0 = entity, E.CMD = command.  Out: R1 = state.
 ; commands: 1 right, 2 left, 4 down, 10 up, 11/12 up-diagonal,
-; 20 attack (octal; ZX 9/0xA = 11/12, 0x10 = 20).
+; 20 attack, 21/22 attack+direction (octal; the ZX hex values are
+; 9/0xA = 11/12, 0x10 = 20, 0x11/0x12 = 21/22).
 ; ------------------------------------------------------------------
 
 ; stand / turn / dispatch (ZX CD9B)
@@ -139,6 +140,7 @@ HS_GROUND:	CALL	FLOOR_CHK
 		BEQ	HS_FLOOR
 		CALL	CLIMB_CHK		; in the air: ladder or fall
 		BNE	1$
+		CALL	CLIMB_SNAP
 		MOV	#16,R1			; -> climb
 		RETURN
 1$:		CMP	R0,#NINJA
@@ -190,14 +192,20 @@ HS_FLOOR:	MOVB	E.CMD(R0),R1
 		BEQ	61$
 		MOV	#1,R1
 		RETURN
-61$:		CALL	RIGHT_BLK
+61$:		CALL	LADDER_CHK		; a ladder through the floor:
+		BNE	64$			; climb down it (centred)
+		MOVB	#4,E.YOFF(R0)
+		CALL	CLIMB_SNAP
+		MOV	#16,R1			; -> climbing
+		RETURN
+64$:		CALL	RIGHT_BLK
 		BNE	62$
 		CALL	LEFT_BLK
 		BEQ	63$
 		DECB	E.COL(R0)
 62$:		INCB	E.ROW(R0)
 		INCB	E.ROW(R0)
-		MOV	#10,R1			; -> on the ladder, going down
+		MOV	#10,R1			; -> lying flat (the dodge)
 		RETURN
 63$:		MOV	#1,R1
 		RETURN
@@ -225,21 +233,21 @@ H_WALK:		CLRB	E.C12(R0)
 		JMP	STEP_RET
 2$:		CMP	R0,#BRUCE
 		BNE	HW_STOP
-		CMP	R1,#11			; up-diagonal: running leap
-		BNE	3$
+		CMP	R1,#21			; fire mid-walk: the flying
+		BNE	3$			; kick (ZX 0x11)
 		MOVB	E.C13(R0),R2
 		BIC	#177400,R2
 		CMP	R2,#2			; needs two steps of run-up
 		BLO	21$
 		CALL	RIGHT_BLK
 		BEQ	HW_STOP
-		MOV	#4,R1			; -> flying leap
+		MOV	#4,R1			; -> flying kick
 		RETURN
 21$:		MOV	#3,R1
 		INCB	E.COL(R0)
 		JMP	STEP_RET
-3$:		CMP	R1,#10			; up mid-walk: vault
-		BNE	HW_STOP
+3$:		CMP	R1,#11			; up mid-walk: the side jump
+		BNE	HW_STOP			; (ZX 0x09)
 		CALL	HEAD_CHK
 		BEQ	21$
 		DECB	E.ROW(R0)
@@ -260,7 +268,7 @@ HW_LEFT:	CALL	LEFT_BLK
 		JMP	STEP_RET
 2$:		CMP	R0,#BRUCE
 		BNE	HW_STOP
-		CMP	R1,#12
+		CMP	R1,#22			; fire mid-walk (ZX 0x12)
 		BNE	3$
 		MOVB	E.C13(R0),R2
 		BIC	#177400,R2
@@ -269,12 +277,12 @@ HW_LEFT:	CALL	LEFT_BLK
 		CALL	LEFT_BLK
 		BEQ	HW_STOP
 		DECB	E.COL(R0)
-		MOV	#4,R1			; -> flying leap
+		MOV	#4,R1			; -> flying kick
 		RETURN
 21$:		MOV	#3,R1
 		DECB	E.COL(R0)
 		JMP	STEP_RET
-3$:		CMP	R1,#10
+3$:		CMP	R1,#12			; up mid-walk (ZX 0x0A)
 		BNE	HW_STOP
 		CALL	HEAD_CHK
 		BEQ	21$
@@ -286,6 +294,7 @@ HW_LEFT:	CALL	LEFT_BLK
 
 HW_AIR:		CALL	CLIMB_CHK		; no floor mid-walk
 		BNE	1$
+		CALL	CLIMB_SNAP
 		MOV	#16,R1			; ladder caught
 		RETURN
 1$:		CALL	FALL_ENTER
@@ -307,6 +316,7 @@ H_STEP:		CALL	FLOOR_CHK
 		BEQ	1$
 		CALL	CLIMB_CHK
 		BNE	2$
+		CALL	CLIMB_SNAP
 		MOV	#16,R1
 		RETURN
 2$:		CMP	R0,#NINJA
@@ -396,8 +406,8 @@ H_DUCKWALK:	INCB	E.C12(R0)
 		MOV	#6,R1
 		RETURN
 
-; on the ladder after descending (ZX CFBD)
-H_CLIMBUP:	MOVB	E.CMD(R0),R1
+; lying flat on the floor (ZX CFBD): the dodge; back up on release
+H_LIEDOWN:	MOVB	E.CMD(R0),R1
 		BIC	#177400,R1
 		CMP	R1,#4
 		BNE	1$
@@ -483,7 +493,8 @@ H_FALL:		CALL	JUMP_ARC
 		MOVB	#7,E.TICK(R0)
 		MOV	#1,R1
 		RETURN
-3$:		CLRB	E.YOFF(R0)
+3$:		CALL	CLIMB_SNAP
+		CLRB	E.YOFF(R0)
 		MOV	#16,R1
 		RETURN
 
@@ -523,9 +534,11 @@ H_CLIMB:	MOVB	E.STATE(R0),-(SP)
 		BIC	#177776,R1
 		MOVB	R1,E.FACE(R0)
 		MOVB	#10,E.TICK(R0)
-		MOVB	(SP)+,R1
-		MOV	#17,R1			; wait: use climb pose pair
-		RETURN
+		MOVB	(SP)+,R1		; keep the state: the grip flip
+		RETURN				; alone animates (as on the ZX;
+						; the 3-wide climb2 frame would
+						; jam HEAD_CHK in a one-hole
+						; floor)
 4$:		CMP	R1,#4			; down
 		BNE	6$
 		CALL	GET_DIMS		; reached the floor below?
