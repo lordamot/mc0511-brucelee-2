@@ -34,7 +34,13 @@ the blit is the only video-register work.
   video controller masks next-links with ~7, hence the 4 pad bytes
   per row block).  PPU COMMAND_2 rewrites all 24 row palettes from
   the CPU ROWPALS array (24 x 2 words, nibble = Y*8+R*4+G*2+B).
-  Per-chamber palettes can now be added as a resource when wanted.
+  DONE: CH_LOAD calls CH_ROWPALS (title.mac), which scans the live
+  map after the patch list and gives every cell row that holds a
+  collectible lamp (tiles octal 20..26) a bright-yellow "warm" ink
+  (value 4 nibble C -> E) - the lanterns are yellow as on the ZX,
+  and the lamp tiles are combo=1 (warm) in tiles.txt.  Trade-off:
+  a red/magenta tile sharing a cell row with a lamp shows yellow in
+  that row (9 such rows: chambers 2, 11, 16, 17).
 - Tiles are pre-colored at build time: 8 words (16 bytes) per tile,
   low byte plane 1, high byte plane 2 (tools/tiles_gen.py from
   tiles.txt: `#`-bitmap + ink class 1..3 per tile).

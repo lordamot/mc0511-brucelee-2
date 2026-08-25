@@ -1,6 +1,8 @@
 # Background tiles (8x8).  '#' = ink pixel, '.' = background.
 # combo: UKNC plane combo the ink maps to (1 warm/red, 2 cool/green,
 # 3 white); attr is the original ZX attribute for reference.
+# The collectible lamps (10-16) are combo=1: rows holding a lamp get
+# a yellow warm ink from CH_ROWPALS, so the lanterns show yellow.
 # Tile classes by code (collision): >=40 solid, 18-1F climbable,
 # 20-3F scenery, 17 exit, 10-16 collectible, <10 background.
 
@@ -164,7 +166,7 @@ tile 0f combo=3 ink=WHITE bright attr=47
 ###.##..
 ##.###..
 
-tile 10 combo=3 ink=YELLOW bright attr=46
+tile 10 combo=1 ink=YELLOW bright attr=46
 .#####..
 .#####..
 .##.....
@@ -174,7 +176,7 @@ tile 10 combo=3 ink=YELLOW bright attr=46
 .######.
 ..#..#..
 
-tile 11 combo=3 ink=YELLOW bright attr=46
+tile 11 combo=1 ink=YELLOW bright attr=46
 ..#..#..
 .######.
 .######.
@@ -184,7 +186,7 @@ tile 11 combo=3 ink=YELLOW bright attr=46
 ........
 ........
 
-tile 12 combo=3 ink=YELLOW bright attr=46
+tile 12 combo=1 ink=YELLOW bright attr=46
 .#.#.#..
 ..#.#...
 ..###...
@@ -194,7 +196,7 @@ tile 12 combo=3 ink=YELLOW bright attr=46
 .######.
 ..#..#..
 
-tile 13 combo=3 ink=YELLOW bright attr=46
+tile 13 combo=1 ink=YELLOW bright attr=46
 ........
 ........
 .###....
@@ -204,7 +206,7 @@ tile 13 combo=3 ink=YELLOW bright attr=46
 ....#...
 ....#...
 
-tile 14 combo=3 ink=YELLOW bright attr=46
+tile 14 combo=1 ink=YELLOW bright attr=46
 ...#....
 ...##...
 ..####..
@@ -214,7 +216,7 @@ tile 14 combo=3 ink=YELLOW bright attr=46
 ........
 ........
 
-tile 15 combo=3 ink=YELLOW bright attr=46
+tile 15 combo=1 ink=YELLOW bright attr=46
 ........
 ........
 ....###.
@@ -224,7 +226,7 @@ tile 15 combo=3 ink=YELLOW bright attr=46
 ...#....
 ...#....
 
-tile 16 combo=3 ink=YELLOW bright attr=46
+tile 16 combo=1 ink=YELLOW bright attr=46
 ........
 ..####..
 .#....#.

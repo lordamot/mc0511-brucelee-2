@@ -25,8 +25,10 @@ make build     # sources -> build/brucelee.dsk (bootable image)
 make run       # build + play in an SDL window
 make shot      # headless: boot to the game menu, screenshot to tmp/
 make demo      # headless: start a game, walk into chamber 1
-make verify    # generators, title round-trip, image checks, and a
-               # boot-to-gameplay smoke test in the headless emulator
+make verify    # generators, title round-trip, image checks, plus a
+               # boot-to-gameplay smoke test and engine behavior
+               # checks (lamp pickup, fall landing) in the headless
+               # emulator
 ```
 
 In `make run` the firmware boot menu loads the disk automatically;

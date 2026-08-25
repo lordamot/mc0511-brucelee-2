@@ -20,6 +20,12 @@ Check groups:
               reaches the menu (white text), ENTER starts the game,
               and walking right exits chamber 0 into chamber 1
 
+  gameplay    engine behavior in the headless emulator (Bruce is
+              teleported with pokecpu): the collectible lamps render
+              yellow, a fall lands back into the standing state in
+              place (ZX D112), and picking a lamp up scores 125 and
+              removes it from the map
+
 Usage:
     python3 tools/verify_build.py [--skip-smoke]
 """
@@ -190,6 +196,59 @@ quit
     check("walking right reaches chamber 1", ch[0] == 1, f"chamber={ch[0]}")
 
 
+def verify_gameplay(tmp):
+    bruce = symbol_addr("BRUCE")
+    score1 = symbol_addr("SCORE1")
+    hdr = symbol_addr("HDR")            # MAPB = HDR: map cell base
+    e_state, e_yoff, e_col = bruce + 2, bruce + 4, bruce + 6
+    lamp_top = hdr + 18 * 32 + 17       # chamber 0 lamp at (17, 18)
+    script = tmp / "gameplay.script"
+    script.write_text(f"""\
+run 900
+press 030
+run 30
+press 153
+run 350
+press 153
+run 100
+press 153
+run 100
+screenshot {tmp}/g-start.bmp
+pokecpu {e_yoff:o} 0
+pokecpu {e_col:o} 4 3
+run 150
+dumpcpu {bruce:o} 20 {tmp}/g-fall.bin
+pokecpu {e_col:o} 21 22
+run 60
+dumpcpu {score1:o} 6 {tmp}/g-score.bin
+dumpcpu {lamp_top:o} 1 {tmp}/g-lamp.bin
+quit
+""")
+    r = run([REPO_ROOT / "bin/ukncbtl/uknc-headless",
+             "--rom", REPO_ROOT / "bin/ukncbtl/uknc_rom.bin",
+             "--disk", REPO_ROOT / "build/brucelee.dsk",
+             "--script", script], timeout=300)
+    check("gameplay script runs", r.returncode == 0, r.stderr.strip())
+    if r.returncode != 0:
+        return
+
+    start = count_colors(tmp / "g-start.bmp")
+    yellow = sum(n for c, n in start.items()
+                 if c[0] > 180 and c[1] > 180 and c[2] < 80)
+    check("lamps render yellow", yellow > 100, f"yellow={yellow}")
+
+    rec = (tmp / "g-fall.bin").read_bytes()
+    state, col, row = rec[2], rec[6], rec[7]
+    check("fall lands standing in place (ZX D112)",
+          state == 1 and col == 4 and row == 6,
+          f"state={state} col={col} row={row}")
+
+    score = (tmp / "g-score.bin").read_bytes()
+    check("lamp pickup scores 125", score == b"000125", score.decode())
+    lamp = (tmp / "g-lamp.bin").read_bytes()[0]
+    check("collected lamp leaves the map", lamp != 0x10, f"tile={lamp:02x}")
+
+
 def main(argv=None):
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     ap.add_argument("--skip-smoke", action="store_true")
@@ -206,6 +265,8 @@ def main(argv=None):
         if not args.skip_smoke:
             print("smoke:")
             verify_smoke(tmp)
+            print("gameplay:")
+            verify_gameplay(tmp)
 
     if failures:
         print(f"\n{len(failures)} check(s) FAILED: " + ", ".join(failures))

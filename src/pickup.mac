@@ -67,7 +67,7 @@ PICKUP:		CMP	R0,#BRUCE
 		MOV	R5,-(SP)
 		CALL	PIX_OVERLAP
 		BEQ	8$
-		MOV	2(SP),R3		; map ptr -> cell offset
+		MOV	4(SP),R3		; saved map ptr -> cell offset
 		SUB	#MAPB,R3
 		MOV	R3,-(SP)
 		MOV	#S_B125,R3		; lantern: 125 points

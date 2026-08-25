@@ -18,6 +18,7 @@
         peekw PLAN ADDR       print RAM word (PLAN 0..2, ADDR octal)
         dump PLAN ADDR LEN F  write LEN (decimal) bytes of a plane to file F
         peekcpu ADDR          print a CPU-address-space word (octal addr)
+        pokecpu ADDR B...     write octal bytes into CPU address space
         regs                  print CPU and PPU PC/SP
         dumpcpu ADDR LEN F    write LEN bytes of CPU address space to F
         reset                 reset the machine
@@ -356,6 +357,23 @@ static int ExecuteLine(char *line)
         uint16_t w = (uint16_t)(g_pBoard->GetRAMByte(1, off) |
                                 (g_pBoard->GetRAMByte(2, off) << 8));
         printf("peekcpu %06o = %06o (%u)\n", addr, w, w);
+    }
+    else if (!strcmp(cmd, "pokecpu") && tok.size() >= 3)
+    {
+        // write bytes into CPU address space, starting at ADDR
+        unsigned addr;
+        if (!ParseOctal(tok[1], &addr))
+            return Fail("usage: pokecpu OCTAL-ADDR OCTAL-BYTE...");
+        for (size_t i = 2; i < tok.size(); i++)
+        {
+            unsigned val;
+            if (!ParseOctal(tok[i], &val) || val > 0377)
+                return Fail("bad octal byte: %s", tok[i]);
+            unsigned a = addr + (unsigned)(i - 2);
+            g_pBoard->SetRAMByte((a & 1) ? 2 : 1, (uint16_t)(a / 2),
+                                 (uint8_t)val);
+        }
+        printf("pokecpu %06o: %zu byte(s)\n", addr, tok.size() - 2);
     }
     else if (!strcmp(cmd, "dumpcpu") && tok.size() >= 4)
     {

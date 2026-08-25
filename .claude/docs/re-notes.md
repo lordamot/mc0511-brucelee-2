@@ -91,7 +91,7 @@ DI, I=0x3F.  The game then rebuilds its own IM2 world: vector table
 | C366 | restore background under entity (5-wide cell strip from map) |
 | C3CB | draw entity sprite: composition list, glyphs 0xA000/0xA800(+4px), masks +0x1000, AND/OR into back buffer |
 | C7AB | main loop: vsync wait, C121, entity updates C2EC x3, draws C366/C3CB x3 |
-| C99B | print string routine? (HL=string) |
+| C99B | add score: HL = 6-ASCII-digit amount; updates score, top score, extra-life check (port: score.mac SCORE_ADD) |
 | CA37 | dispatch on (FE03) via jump table after call site |
 | DE41 | called on chamber load |
 

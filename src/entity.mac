@@ -593,8 +593,18 @@ H_FALLING:	MOVB	E.YOFF(R0),R1
 		RETURN
 2$:		CALL	FLOOR_CHK
 		BNE	3$
-		MOV	#6,R1			; landed: crouch absorb
-		MOVB	#2,E.TICK(R0)
+		CMP	R0,#BRUCE		; landed (ZX D132): Bruce
+		BNE	22$			; square on an enemy's cell
+		MOV	E.COL(R0),R1		; scores 50 (col+row word)
+		CMP	R1,NINJA+E.COL
+		BEQ	21$
+		CMP	R1,YAMO+E.COL
+		BNE	22$
+21$:		MOV	#S_B50,R3
+		CALL	SCORE_ADD
+		MOV	#BRUCE,R0
+22$:		MOVB	#6,E.TICK(R0)		; back on his feet (ZX D154)
+		MOV	#1,R1
 		JMP	STEP_RET
 3$:		MOVB	#2,E.YOFF(R0)
 		MOVB	#2,E.TICK(R0)

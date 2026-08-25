@@ -13,7 +13,7 @@ AI_CMD:		CMP	R0,#BRUCE
 		BNE	AI_THINK
 		TST	YAMO_HUMAN
 		BEQ	AI_THINK
-		MOVB	CMD2,R1			; the green giant: player 2
+		MOVB	CMD2,R1			; Yamo: player 2
 		BIC	#177400,R1
 		RETURN
 

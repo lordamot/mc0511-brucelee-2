@@ -79,5 +79,38 @@ STD_ROWPALS:	MOV	#ROWPALS,R2
 		CALL	SEND_PP_COMM
 		RETURN
 
+; ------------------------------------------------------------------
+; per-chamber game palette: like STD_ROWPALS, but every map row that
+; holds a collectible lamp (tiles 20..26) gets a bright-yellow
+; "warm" ink (value 4: nibble C red -> E yellow), as on the ZX where
+; the lanterns are yellow.  Called from CH_LOAD once the patch list
+; has put the lamps into the live map.
+CH_ROWPALS:	MOV	#ROWPALS,R2
+		CLR	R3			; cell row 0..23
+1$:		MOV	#135220,(R2)+		; values 0..3 fixed
+		MOV	#177734,R1		; warm ink red by default
+		CMP	R3,#2
+		BLO	4$			; HUD rows: standard
+		MOV	R3,R0			; scan the row's 32 map cells
+		ASH	#5,R0
+		MOV	#40,R5
+2$:		MOVB	MAPB(R0),R4
+		BIC	#177400,R4
+		CMP	R4,#20			; collectible lamp?
+		BLO	3$
+		CMP	R4,#26
+		BHI	3$
+		MOV	#177736,R1		; warm ink bright yellow
+		BR	4$
+3$:		INC	R0
+		SOB	R5,2$
+4$:		MOV	R1,(R2)+
+		INC	R3
+		CMP	R3,#30
+		BLO	1$
+		MOV	#2,R0
+		CALL	SEND_PP_COMM
+		RETURN
+
 PARAMS_T0:	.WORD	BUF,TITLE0_SEC,TITLE0_LBA
 PARAMS_T12:	.WORD	BUF,TITLE12_SEC,0	; 0 = continue from current LBA

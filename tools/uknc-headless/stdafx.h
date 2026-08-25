@@ -27,7 +27,14 @@ typedef const char *LPCTSTR;
 typedef void *HANDLE;
 #define INVALID_HANDLE_VALUE ((HANDLE)(intptr_t)-1)
 
-#define ASSERT(f)   assert(f)
+/* emubase ASSERTs guard against misbehaving *emulated* programs (odd
+   PC, bad addresses).  Never abort the host process for those - warn
+   once per site on stderr and carry on, like UKNCBTL release builds
+   (which compile ASSERT out entirely). */
+#define ASSERT(f) \
+    do { if (!(f)) { static bool warned_; if (!warned_) { warned_ = true; \
+        fprintf(stderr, "uknc: emubase assertion failed: %s (%s:%d)\n", \
+                #f, __FILE__, __LINE__); } } } while (0)
 #define VERIFY(f)   ((void)(f))
 
 #define MAKEWORD(a, b) ((uint16_t)(((uint8_t)(((uint32_t)(a)) & 0xff)) | \

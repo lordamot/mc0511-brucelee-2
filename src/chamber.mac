@@ -111,6 +111,7 @@ PATCH_DONE:
 		MOV	#S_B2000,R3
 		CALL	SCORE_ADD
 11$:
+		CALL	CH_ROWPALS	; lamp rows show a yellow warm ink
 		CALL	DRAW_MAP
 		CALL	HUD_DRAW
 		MOV	#1,REDRAW

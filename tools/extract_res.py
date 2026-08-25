@@ -23,6 +23,9 @@ BASE = 0x4000
 ZX_COLORS = ["BLACK", "BLUE", "RED", "MAGENTA", "GREEN", "CYAN", "YELLOW", "WHITE"]
 # ZX ink -> UKNC plane combo class: 1 = "warm" (plane1), 2 = "cool" (plane2),
 # 3 = white (planes 1+2).  Black ink handled per-tile (invert vs paper).
+# Note: src/res/tiles/tiles.txt was hand-retouched after extraction -
+# the collectible lamps (tiles 0x10-0x16, yellow ink) are combo=1 so
+# CH_ROWPALS can show them yellow; a re-extraction would lose that.
 INK_COMBO = {0: 0, 1: 2, 2: 1, 3: 1, 4: 2, 5: 2, 6: 3, 7: 3}
 
 
